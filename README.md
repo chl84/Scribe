@@ -8,6 +8,22 @@ The project is being built with:
 - `Tauri` for desktop application packaging and system integration
 - `Svelte` and `Vite` for the frontend
 
+## Development
+
+Install frontend dependencies from the repository root:
+
+```bash
+npm run setup
+```
+
+Start the desktop app from the repository root:
+
+```bash
+npm run dev
+```
+
+The root scripts are the primary entrypoint for local development so the same commands work on Linux and Windows.
+
 ## Product Direction
 
 Scribe is intended to become a robust, extensible editor rather than a throwaway prototype.
@@ -34,5 +50,3 @@ The project is organized to keep a clear separation between frontend, backend, a
 
 The architecture and AI engineering principles are defined in [AI_ENGINEERING_STRATEGY.md](./AI_ENGINEERING_STRATEGY.md).
 See [docs/architecture/project-structure.md](./docs/architecture/project-structure.md) for folder responsibilities and dependency rules.
-
-Note: if the project is wired directly into the Tauri toolchain, that setup must be configured to use `backend/` instead of the default `src-tauri/` directory.

@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "tauri:dev": "cd ../backend && node ../frontend/node_modules/@tauri-apps/cli/tauri.js dev",
-    "tauri:build": "cd ../backend && node ../frontend/node_modules/@tauri-apps/cli/tauri.js build"
+    "preview": "vite preview"
   },
   "dependencies": {
     "svelte": "^5.53.11"
