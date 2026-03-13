@@ -4,7 +4,7 @@
 
 This document defines how AI assistants should be used when designing and implementing the architecture of this project.
 
-The goal is to ensure that AI-generated code, architecture decisions, and refactoring proposals follow the same engineering principles required for a **long-lived Rust + Tauri + Svelte desktop application expected to grow to roughly 100k+ lines of code**.
+The goal is to ensure that AI-generated code, architecture decisions, and refactoring proposals follow the same engineering principles required for a **long-lived Rust + Tauri + Svelte cross-platform desktop application for Linux and Windows, expected to grow to roughly 100k+ lines of code**.
 
 This document serves as:
 
@@ -25,7 +25,7 @@ It should be used whenever AI is involved in:
 
 # Project Context
 
-This project aims to build a **robust and feature-rich desktop text editor** using:
+This project aims to build a **robust and feature-rich cross-platform desktop text editor for Linux and Windows** using:
 
 - **Rust**
 - **Tauri**

@@ -1,0 +1,25 @@
+:root {
+  color: #111827;
+  background: #f5f1e8;
+  font-family: "Iosevka", "IBM Plex Sans", sans-serif;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+main {
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 45%),
+    linear-gradient(180deg, #f8f4eb 0%, #ece4d6 100%);
+}

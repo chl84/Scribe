@@ -1,2 +1,5 @@
-// Svelte configuration is added when the frontend stack is bootstrapped.
-export default {};
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
+
+export default {
+  preprocess: vitePreprocess(),
+};

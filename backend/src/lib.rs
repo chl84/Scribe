@@ -1,3 +1,6 @@
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Tauri/application bootstrap is added when the backend runtime is wired up.
+    tauri::Builder::default()
+        .run(tauri::generate_context!())
+        .expect("failed to run Scribe");
 }
