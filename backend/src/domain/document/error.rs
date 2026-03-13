@@ -14,6 +14,10 @@ pub enum DocumentError {
         start: TextOffset,
         end: TextOffset,
     },
+    PositionOutOfBounds {
+        line: usize,
+        column: usize,
+    },
     InvalidUtf8Boundary {
         offset: TextOffset,
     },
@@ -38,6 +42,9 @@ impl Display for DocumentError {
                     end.value(),
                     len
                 )
+            }
+            Self::PositionOutOfBounds { line, column } => {
+                write!(f, "position {}:{} is out of bounds", line, column)
             }
             Self::InvalidUtf8Boundary { offset } => {
                 write!(f, "offset {} is not on a UTF-8 character boundary", offset.value())

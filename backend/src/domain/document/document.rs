@@ -1,12 +1,14 @@
 use super::{
-    ChangeSet, DocumentError, DocumentId, Edit, NewlinePolicy, RevisionId, TextOffset, TextRange,
+    ChangeSet, DocumentError, DocumentId, Edit, LineIndex, NewlinePolicy, PieceTable, Position,
+    RevisionId, TextBuffer, TextOffset, TextRange,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
     id: DocumentId,
     revision: RevisionId,
-    text: String,
+    buffer: PieceTable,
+    line_index: LineIndex,
     newline_policy: NewlinePolicy,
 }
 
@@ -14,11 +16,14 @@ impl Document {
     pub fn open(id: DocumentId, text: impl Into<String>) -> Self {
         let text = text.into();
         let newline_policy = NewlinePolicy::detect(&text);
+        let buffer = PieceTable::new(text);
+        let line_index = LineIndex::from_snapshot(&buffer.snapshot());
 
         Self {
             id,
             revision: RevisionId::initial(),
-            text,
+            buffer,
+            line_index,
             newline_policy,
         }
     }
@@ -31,8 +36,8 @@ impl Document {
         self.revision
     }
 
-    pub fn text(&self) -> &str {
-        &self.text
+    pub fn text(&self) -> String {
+        self.buffer.snapshot().as_str().to_string()
     }
 
     pub const fn newline_policy(&self) -> NewlinePolicy {
@@ -40,11 +45,25 @@ impl Document {
     }
 
     pub fn len_bytes(&self) -> usize {
-        self.text.len()
+        self.buffer.len_bytes()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.text.is_empty()
+        self.buffer.len_bytes() == 0
+    }
+
+    pub fn line_count(&self) -> usize {
+        self.line_index.line_count()
+    }
+
+    pub fn offset_to_position(&self, offset: TextOffset) -> Result<Position, DocumentError> {
+        let snapshot = self.buffer.snapshot();
+        self.line_index.offset_to_position(&snapshot, offset)
+    }
+
+    pub fn position_to_offset(&self, position: Position) -> Result<TextOffset, DocumentError> {
+        let snapshot = self.buffer.snapshot();
+        self.line_index.position_to_offset(&snapshot, position)
     }
 
     pub fn apply_edit(&mut self, edit: Edit) -> Result<ChangeSet, DocumentError> {
@@ -64,7 +83,8 @@ impl Document {
 
         let revision_before = self.revision;
         let range_before = TextRange::empty_at(offset);
-        self.text.insert_str(offset.value(), &text);
+        self.buffer.insert(offset, &text)?;
+        self.line_index.apply_change(offset, 0, &text);
         self.revision = self.revision.next();
 
         let range_after = TextRange::new(offset, offset.checked_add(text.len()))?;
@@ -85,8 +105,11 @@ impl Document {
         self.validate_range(range)?;
 
         let revision_before = self.revision;
-        let removed_text = self.text[range.start().value()..range.end().value()].to_string();
-        self.text.replace_range(range.start().value()..range.end().value(), "");
+        let snapshot = self.buffer.snapshot();
+        let removed_text = snapshot.slice(range)?.to_string();
+        self.buffer.delete(range)?;
+        self.line_index
+            .apply_change(range.start(), range.len(), "");
         self.revision = self.revision.next();
 
         let range_after = TextRange::empty_at(range.start());
@@ -110,9 +133,11 @@ impl Document {
         self.validate_range(range)?;
 
         let revision_before = self.revision;
-        let removed_text = self.text[range.start().value()..range.end().value()].to_string();
-        self.text
-            .replace_range(range.start().value()..range.end().value(), &text);
+        let snapshot = self.buffer.snapshot();
+        let removed_text = snapshot.slice(range)?.to_string();
+        self.buffer.replace(range, &text)?;
+        self.line_index
+            .apply_change(range.start(), range.len(), &text);
         self.revision = self.revision.next();
 
         let range_after = TextRange::new(range.start(), range.start().checked_add(text.len()))?;
@@ -133,7 +158,7 @@ impl Document {
     }
 
     fn validate_range(&self, range: TextRange) -> Result<(), DocumentError> {
-        let len = self.text.len();
+        let len = self.buffer.len_bytes();
 
         if range.end().value() > len {
             return Err(DocumentError::RangeOutOfBounds {
@@ -148,15 +173,15 @@ impl Document {
     }
 
     fn validate_offset(&self, offset: TextOffset) -> Result<(), DocumentError> {
-        if offset.value() > self.text.len() {
+        if offset.value() > self.buffer.len_bytes() {
             return Err(DocumentError::RangeOutOfBounds {
-                len: self.text.len(),
+                len: self.buffer.len_bytes(),
                 start: offset,
                 end: offset,
             });
         }
 
-        if !self.text.is_char_boundary(offset.value()) {
+        if !self.buffer.is_char_boundary(offset) {
             return Err(DocumentError::InvalidUtf8Boundary { offset });
         }
 

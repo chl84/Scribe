@@ -5,3 +5,4 @@ This directory is used to describe domain concepts, aggregates, workflows, and k
 Current notes:
 
 - [text-document-foundation.md](./text-document-foundation.md)
+- [text-buffer-strategy.md](./text-buffer-strategy.md)

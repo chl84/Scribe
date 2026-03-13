@@ -6,16 +6,16 @@ Implement the internal text storage and the line index needed for fast editor op
 
 ## Todo
 
-- [ ] Define a `TextBuffer` interface for reading slices and applying edits.
-- [ ] Implement a `PieceTable` with original and add buffers.
-- [ ] Support `insert`, `delete`, and `replace` on top of the piece table.
-- [ ] Implement piece splitting and piece merging rules.
-- [ ] Define how snapshots or borrowed reads are exposed safely.
-- [ ] Add a `LineIndex` that maps `offset -> line/column`.
-- [ ] Add reverse mapping from `line/column -> offset`.
-- [ ] Update the line index incrementally after edits.
-- [ ] Add tests for large inserts, deletes across line boundaries, and empty-line cases.
-- [ ] Add tests for UTF-8 edge cases so offset math does not corrupt text.
+- [x] Define a `TextBuffer` interface for reading slices and applying edits.
+- [x] Implement a `PieceTable` with original and add buffers.
+- [x] Support `insert`, `delete`, and `replace` on top of the piece table.
+- [x] Implement piece splitting and piece merging rules.
+- [x] Define how snapshots or borrowed reads are exposed safely.
+- [x] Add a `LineIndex` that maps `offset -> line/column`.
+- [x] Add reverse mapping from `line/column -> offset`.
+- [x] Update the line index incrementally after edits.
+- [x] Add tests for large inserts, deletes across line boundaries, and empty-line cases.
+- [x] Add tests for UTF-8 edge cases so offset math does not corrupt text.
 
 ## Exit Criteria
 
