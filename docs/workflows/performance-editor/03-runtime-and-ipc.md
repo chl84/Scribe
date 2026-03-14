@@ -9,7 +9,7 @@ Remove backend coordination bottlenecks and redesign editor IPC for high-frequen
 - [x] Replace the single shared mutex around editor state with a dedicated editor runtime.
 - [x] Move document operations onto a dedicated backend thread or task runtime.
 - [ ] Introduce explicit document sessions and viewport sessions.
-- [ ] Make document commands revision-aware.
+- [x] Make document commands revision-aware.
 - [ ] Redesign IPC around high-frequency commands:
   - `apply_edit`
   - `move_cursor`
@@ -35,3 +35,5 @@ Remove backend coordination bottlenecks and redesign editor IPC for high-frequen
 - The backend now routes Tauri commands through `application/runtime/editor_runtime.rs` instead of holding `EditorService` behind a shared `Mutex`.
 - The runtime currently keeps the existing request-response IPC surface while moving execution to a dedicated editor thread.
 - Repeated `get_document` reads now reuse cached snapshots until a document mutation invalidates the revision.
+- `edit_document`, `undo_document`, `redo_document`, and `save_document` now accept optional expected revisions and reject stale callers explicitly.
+- Runtime tests now cover concurrent command ordering, repeated snapshot reads, and stale-revision propagation.

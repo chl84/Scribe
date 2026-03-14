@@ -5,7 +5,7 @@ use crate::application::commands::{
     DocumentSnapshot, EditDocument, EditResult, PerformanceTelemetry, SaveDocument,
 };
 use crate::application::state::{DocumentEntry, DocumentStore};
-use crate::domain::document::{Document, DocumentError, DocumentId};
+use crate::domain::document::{Document, DocumentError, DocumentId, RevisionId};
 use crate::infrastructure::filesystem::FileSystem;
 
 #[derive(Debug)]
@@ -13,6 +13,11 @@ pub enum EditorServiceError {
     Document(DocumentError),
     DocumentNotFound(DocumentId),
     MissingDocumentPath(DocumentId),
+    StaleRevision {
+        document_id: DocumentId,
+        expected: RevisionId,
+        actual: RevisionId,
+    },
     FileSystem(String),
 }
 
@@ -26,6 +31,17 @@ impl std::fmt::Display for EditorServiceError {
             Self::MissingDocumentPath(document_id) => {
                 write!(f, "document {} has no file path", document_id.value())
             }
+            Self::StaleRevision {
+                document_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "stale revision for document {}: expected {}, actual {}",
+                document_id.value(),
+                expected.value(),
+                actual.value()
+            ),
             Self::FileSystem(error) => write!(f, "{error}"),
         }
     }
@@ -129,6 +145,11 @@ impl<F: FileSystem> EditorService<F> {
             .store
             .get_mut(command.document_id)
             .ok_or(EditorServiceError::DocumentNotFound(command.document_id))?;
+        ensure_revision_matches(
+            command.document_id,
+            command.expected_revision,
+            document.document().revision(),
+        )?;
         let operation_started_at = Instant::now();
 
         let change = document.document_mut().apply_edit(command.edit)?;
@@ -153,11 +174,17 @@ impl<F: FileSystem> EditorService<F> {
     pub fn undo_document(
         &mut self,
         document_id: DocumentId,
+        expected_revision: Option<RevisionId>,
     ) -> Result<EditResult, EditorServiceError> {
         let document = self
             .store
             .get_mut(document_id)
             .ok_or(EditorServiceError::DocumentNotFound(document_id))?;
+        ensure_revision_matches(
+            document_id,
+            expected_revision,
+            document.document().revision(),
+        )?;
         let operation_started_at = Instant::now();
         let changes = document.document_mut().undo()?.unwrap_or_default();
         document.clear_snapshot_cache();
@@ -181,11 +208,17 @@ impl<F: FileSystem> EditorService<F> {
     pub fn redo_document(
         &mut self,
         document_id: DocumentId,
+        expected_revision: Option<RevisionId>,
     ) -> Result<EditResult, EditorServiceError> {
         let document = self
             .store
             .get_mut(document_id)
             .ok_or(EditorServiceError::DocumentNotFound(document_id))?;
+        ensure_revision_matches(
+            document_id,
+            expected_revision,
+            document.document().revision(),
+        )?;
         let operation_started_at = Instant::now();
         let changes = document.document_mut().redo()?.unwrap_or_default();
         document.clear_snapshot_cache();
@@ -214,6 +247,11 @@ impl<F: FileSystem> EditorService<F> {
             .store
             .get_mut(command.document_id)
             .ok_or(EditorServiceError::DocumentNotFound(command.document_id))?;
+        ensure_revision_matches(
+            command.document_id,
+            command.expected_revision,
+            entry.document().revision(),
+        )?;
         let path = command
             .path
             .or_else(|| entry.path().cloned())
@@ -246,4 +284,22 @@ impl<F: FileSystem> EditorService<F> {
             })
             .ok_or(EditorServiceError::DocumentNotFound(document_id))
     }
+}
+
+fn ensure_revision_matches(
+    document_id: DocumentId,
+    expected_revision: Option<RevisionId>,
+    actual_revision: RevisionId,
+) -> Result<(), EditorServiceError> {
+    if let Some(expected_revision) = expected_revision {
+        if expected_revision != actual_revision {
+            return Err(EditorServiceError::StaleRevision {
+                document_id,
+                expected: expected_revision,
+                actual: actual_revision,
+            });
+        }
+    }
+
+    Ok(())
 }

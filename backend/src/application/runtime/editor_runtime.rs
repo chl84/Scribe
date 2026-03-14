@@ -4,7 +4,7 @@ use std::thread;
 
 use crate::application::commands::{DocumentSnapshot, EditDocument, EditResult, SaveDocument};
 use crate::application::services::{EditorService, EditorServiceError};
-use crate::domain::document::DocumentId;
+use crate::domain::document::{DocumentId, RevisionId};
 use crate::infrastructure::filesystem::FileSystem;
 
 #[derive(Debug)]
@@ -58,10 +58,12 @@ enum EditorRuntimeRequest {
     },
     UndoDocument {
         document_id: DocumentId,
+        expected_revision: Option<RevisionId>,
         response: RuntimeResponse<EditResult>,
     },
     RedoDocument {
         document_id: DocumentId,
+        expected_revision: Option<RevisionId>,
         response: RuntimeResponse<EditResult>,
     },
     SaveDocument {
@@ -125,15 +127,33 @@ impl<F: FileSystem + Send + 'static> EditorRuntime<F> {
     }
 
     pub fn undo_document(&self, document_id: DocumentId) -> RuntimeResult<EditResult> {
+        self.undo_document_with_revision(document_id, None)
+    }
+
+    pub fn undo_document_with_revision(
+        &self,
+        document_id: DocumentId,
+        expected_revision: Option<RevisionId>,
+    ) -> RuntimeResult<EditResult> {
         self.send_request(move |response| EditorRuntimeRequest::UndoDocument {
             document_id,
+            expected_revision,
             response,
         })
     }
 
     pub fn redo_document(&self, document_id: DocumentId) -> RuntimeResult<EditResult> {
+        self.redo_document_with_revision(document_id, None)
+    }
+
+    pub fn redo_document_with_revision(
+        &self,
+        document_id: DocumentId,
+        expected_revision: Option<RevisionId>,
+    ) -> RuntimeResult<EditResult> {
         self.send_request(move |response| EditorRuntimeRequest::RedoDocument {
             document_id,
+            expected_revision,
             response,
         })
     }
@@ -186,15 +206,25 @@ fn run_editor_runtime<F: FileSystem + Send + 'static>(
             }
             EditorRuntimeRequest::UndoDocument {
                 document_id,
+                expected_revision,
                 response,
             } => {
-                let _ = response.send(service.undo_document(document_id).map_err(Into::into));
+                let _ = response.send(
+                    service
+                        .undo_document(document_id, expected_revision)
+                        .map_err(Into::into),
+                );
             }
             EditorRuntimeRequest::RedoDocument {
                 document_id,
+                expected_revision,
                 response,
             } => {
-                let _ = response.send(service.redo_document(document_id).map_err(Into::into));
+                let _ = response.send(
+                    service
+                        .redo_document(document_id, expected_revision)
+                        .map_err(Into::into),
+                );
             }
             EditorRuntimeRequest::SaveDocument { command, response } => {
                 let _ = response.send(service.save_document(command).map_err(Into::into));

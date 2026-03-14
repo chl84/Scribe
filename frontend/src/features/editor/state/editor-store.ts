@@ -94,7 +94,11 @@ function createEditorStore() {
 
       try {
         const inputReceivedAt = lastInputReceivedAt ?? now();
-        const editResult = await editDocument(state.snapshot.document_id, edit);
+        const editResult = await editDocument(
+          state.snapshot.document_id,
+          state.snapshot.revision,
+          edit,
+        );
         const editResponseAt = now();
         const refreshStartedAt = now();
         const { snapshot, finishedAt } = await refresh(state.snapshot.document_id, {
@@ -194,7 +198,10 @@ function createEditorStore() {
 
       try {
         const operationStartedAt = now();
-        const result = await undoDocument(state.snapshot.document_id);
+        const result = await undoDocument(
+          state.snapshot.document_id,
+          state.snapshot.revision,
+        );
         const refreshStartedAt = now();
         const { snapshot, finishedAt } = await refresh(state.snapshot.document_id);
         const framePaintedAt = await waitForNextPaint();
@@ -235,7 +242,10 @@ function createEditorStore() {
 
       try {
         const operationStartedAt = now();
-        const result = await redoDocument(state.snapshot.document_id);
+        const result = await redoDocument(
+          state.snapshot.document_id,
+          state.snapshot.revision,
+        );
         const refreshStartedAt = now();
         const { snapshot, finishedAt } = await refresh(state.snapshot.document_id);
         const framePaintedAt = await waitForNextPaint();

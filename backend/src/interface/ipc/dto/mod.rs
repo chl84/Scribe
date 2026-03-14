@@ -16,12 +16,19 @@ pub struct OpenDocumentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaveDocumentRequest {
     pub document_id: u64,
+    pub expected_revision: Option<u64>,
     pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentReference {
     pub document_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevisionedDocumentReference {
+    pub document_id: u64,
+    pub expected_revision: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +52,7 @@ pub enum EditCommandDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditDocumentRequest {
     pub document_id: u64,
+    pub expected_revision: Option<u64>,
     pub edit: EditCommandDto,
 }
 

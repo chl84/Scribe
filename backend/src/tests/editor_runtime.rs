@@ -1,7 +1,7 @@
 use std::thread;
 
 use crate::application::commands::EditDocument;
-use crate::application::runtime::EditorRuntime;
+use crate::application::runtime::{EditorRuntime, EditorRuntimeError};
 use crate::domain::document::{Edit, TextOffset};
 
 use super::support::MemoryFileSystem;
@@ -14,6 +14,7 @@ fn editor_runtime_executes_document_lifecycle_on_dedicated_thread() {
     let edited = runtime
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
                 text: " world".to_string(),
@@ -42,6 +43,7 @@ fn editor_runtime_serializes_commands_from_multiple_callers() {
             runtime
                 .edit_document(EditDocument {
                     document_id,
+                    expected_revision: None,
                     edit: Edit::Insert {
                         offset: TextOffset::new(0),
                         text,
@@ -80,4 +82,43 @@ fn editor_runtime_reuses_cached_snapshot_on_repeated_reads() {
             .and_then(|telemetry| telemetry.snapshot_build_nanos),
         Some(0)
     );
+}
+
+#[test]
+fn editor_runtime_surfaces_stale_revision_errors() {
+    let runtime = EditorRuntime::new(MemoryFileSystem::default());
+    let snapshot = runtime.create_document("hello").unwrap();
+
+    runtime
+        .edit_document(EditDocument {
+            document_id: snapshot.document_id,
+            expected_revision: Some(snapshot.revision),
+            edit: Edit::Insert {
+                offset: TextOffset::new(5),
+                text: "!".to_string(),
+            },
+        })
+        .unwrap();
+
+    let error = runtime
+        .edit_document(EditDocument {
+            document_id: snapshot.document_id,
+            expected_revision: Some(snapshot.revision),
+            edit: Edit::Insert {
+                offset: TextOffset::new(6),
+                text: "?".to_string(),
+            },
+        })
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        EditorRuntimeError::Service(crate::application::services::EditorServiceError::StaleRevision {
+            document_id,
+            expected,
+            actual,
+        }) if document_id == snapshot.document_id
+            && expected == snapshot.revision
+            && actual == snapshot.revision.next()
+    ));
 }

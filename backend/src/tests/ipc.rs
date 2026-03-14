@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use crate::application::commands::DocumentSnapshot;
 use crate::domain::document::{Document, DocumentId, Edit, RevisionId, TextOffset, TextRange};
-use crate::interface::ipc::dto::{ChangeSetDto, DocumentSnapshotDto, EditCommandDto};
+use crate::interface::ipc::dto::{
+    ChangeSetDto, DocumentSnapshotDto, EditCommandDto, EditDocumentRequest,
+    RevisionedDocumentReference, SaveDocumentRequest,
+};
 
 #[test]
 fn edit_command_dto_rejects_inverted_ranges() {
@@ -65,4 +68,29 @@ fn change_set_dto_preserves_revision_and_range_metadata() {
     assert_eq!(dto.range_after.end, 6);
     assert_eq!(dto.inserted_text, "!");
     assert_eq!(dto.removed_text, "");
+}
+
+#[test]
+fn revisioned_requests_capture_expected_revision_metadata() {
+    let edit_request = EditDocumentRequest {
+        document_id: 4,
+        expected_revision: Some(9),
+        edit: EditCommandDto::Insert {
+            offset: 0,
+            text: "a".to_string(),
+        },
+    };
+    let undo_request = RevisionedDocumentReference {
+        document_id: 4,
+        expected_revision: Some(9),
+    };
+    let save_request = SaveDocumentRequest {
+        document_id: 4,
+        expected_revision: Some(9),
+        path: None,
+    };
+
+    assert_eq!(edit_request.expected_revision, Some(9));
+    assert_eq!(undo_request.expected_revision, Some(9));
+    assert_eq!(save_request.expected_revision, Some(9));
 }

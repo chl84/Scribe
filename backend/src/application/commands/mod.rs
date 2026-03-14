@@ -48,11 +48,13 @@ pub struct EditResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SaveDocument {
     pub document_id: DocumentId,
+    pub expected_revision: Option<RevisionId>,
     pub path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditDocument {
     pub document_id: DocumentId,
+    pub expected_revision: Option<RevisionId>,
     pub edit: Edit,
 }

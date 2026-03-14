@@ -23,11 +23,13 @@ export async function getDocument(
 
 export async function editDocument(
   documentId: number,
+  expectedRevision: number | null,
   edit: EditCommandDto,
 ): Promise<EditResultDto> {
   return invokeCommand<EditResultDto>("edit_document", {
     request: {
       document_id: documentId,
+      expected_revision: expectedRevision,
       edit,
     },
   });
@@ -35,16 +37,18 @@ export async function editDocument(
 
 export async function undoDocument(
   documentId: number,
+  expectedRevision: number | null,
 ): Promise<EditResultDto> {
   return invokeCommand<EditResultDto>("undo_document", {
-    request: { document_id: documentId },
+    request: { document_id: documentId, expected_revision: expectedRevision },
   });
 }
 
 export async function redoDocument(
   documentId: number,
+  expectedRevision: number | null,
 ): Promise<EditResultDto> {
   return invokeCommand<EditResultDto>("redo_document", {
-    request: { document_id: documentId },
+    request: { document_id: documentId, expected_revision: expectedRevision },
   });
 }

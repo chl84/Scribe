@@ -25,6 +25,7 @@ fn save_document_without_known_path_is_rejected() {
     let error = service
         .save_document(SaveDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             path: None,
         })
         .unwrap_err();
@@ -44,6 +45,7 @@ fn save_document_surfaces_filesystem_failure_without_dropping_document_state() {
     service
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
                 text: " world".to_string(),
@@ -54,6 +56,7 @@ fn save_document_surfaces_filesystem_failure_without_dropping_document_state() {
     let error = service
         .save_document(SaveDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             path: None,
         })
         .unwrap_err();
@@ -75,6 +78,7 @@ fn unknown_document_operations_return_document_not_found() {
     let edit_error = service
         .edit_document(EditDocument {
             document_id: missing_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(0),
                 text: "x".to_string(),
@@ -93,5 +97,76 @@ fn unknown_document_operations_return_document_not_found() {
     assert!(matches!(
         edit_error,
         EditorServiceError::DocumentNotFound(document_id) if document_id == missing_id
+    ));
+}
+
+#[test]
+fn edit_document_rejects_stale_expected_revision() {
+    let mut service = EditorService::new(MemoryFileSystem::default());
+    let snapshot = service.create_document("hello");
+
+    service
+        .edit_document(EditDocument {
+            document_id: snapshot.document_id,
+            expected_revision: Some(snapshot.revision),
+            edit: Edit::Insert {
+                offset: TextOffset::new(5),
+                text: "!".to_string(),
+            },
+        })
+        .unwrap();
+
+    let error = service
+        .edit_document(EditDocument {
+            document_id: snapshot.document_id,
+            expected_revision: Some(snapshot.revision),
+            edit: Edit::Insert {
+                offset: TextOffset::new(6),
+                text: "?".to_string(),
+            },
+        })
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        EditorServiceError::StaleRevision {
+            document_id,
+            expected,
+            actual,
+        } if document_id == snapshot.document_id
+            && expected == snapshot.revision
+            && actual == snapshot.revision.next()
+    ));
+}
+
+#[test]
+fn undo_document_rejects_stale_expected_revision() {
+    let mut service = EditorService::new(MemoryFileSystem::default());
+    let snapshot = service.create_document("hello");
+
+    service
+        .edit_document(EditDocument {
+            document_id: snapshot.document_id,
+            expected_revision: Some(snapshot.revision),
+            edit: Edit::Insert {
+                offset: TextOffset::new(5),
+                text: "!".to_string(),
+            },
+        })
+        .unwrap();
+
+    let error = service
+        .undo_document(snapshot.document_id, Some(snapshot.revision))
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        EditorServiceError::StaleRevision {
+            document_id,
+            expected,
+            actual,
+        } if document_id == snapshot.document_id
+            && expected == snapshot.revision
+            && actual == snapshot.revision.next()
     ));
 }

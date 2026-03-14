@@ -18,6 +18,7 @@ fn application_service_can_open_edit_and_save_document() {
     let result = service
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
                 text: " world".to_string(),
@@ -30,6 +31,7 @@ fn application_service_can_open_edit_and_save_document() {
     let saved = service
         .save_document(SaveDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             path: None,
         })
         .unwrap();
@@ -49,6 +51,7 @@ fn application_service_handles_large_document_round_trip() {
     service
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(snapshot.text.len()),
                 text: "tail".to_string(),
@@ -59,6 +62,7 @@ fn application_service_handles_large_document_round_trip() {
     let saved = service
         .save_document(SaveDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             path: None,
         })
         .unwrap();
@@ -74,6 +78,7 @@ fn application_service_supports_undo_and_redo() {
     service
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Replace {
                 range: TextRange::new(TextOffset::new(0), TextOffset::new(5)).unwrap(),
                 text: "scribe".to_string(),
@@ -81,7 +86,7 @@ fn application_service_supports_undo_and_redo() {
         })
         .unwrap();
 
-    let undone = service.undo_document(snapshot.document_id).unwrap();
+    let undone = service.undo_document(snapshot.document_id, None).unwrap();
     assert_eq!(undone.changes.len(), 1);
     assert!(undone.telemetry.document_operation_nanos.is_some());
     assert_eq!(
@@ -89,7 +94,7 @@ fn application_service_supports_undo_and_redo() {
         "hello"
     );
 
-    let redone = service.redo_document(snapshot.document_id).unwrap();
+    let redone = service.redo_document(snapshot.document_id, None).unwrap();
     assert_eq!(redone.changes.len(), 1);
     assert!(redone.telemetry.document_operation_nanos.is_some());
     assert_eq!(

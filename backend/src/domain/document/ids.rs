@@ -15,6 +15,10 @@ impl DocumentId {
 pub struct RevisionId(u64);
 
 impl RevisionId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
     pub const fn initial() -> Self {
         Self(0)
     }

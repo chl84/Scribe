@@ -4,11 +4,11 @@ use tauri::State;
 
 use crate::application::commands::{EditDocument, SaveDocument};
 use crate::application::runtime::EditorRuntime;
-use crate::domain::document::DocumentId;
+use crate::domain::document::{DocumentId, RevisionId};
 use crate::infrastructure::filesystem::LocalFileSystem;
 use crate::interface::ipc::dto::{
     CreateDocumentRequest, DocumentReference, DocumentSnapshotDto, EditDocumentRequest,
-    EditResultDto, OpenDocumentRequest, SaveDocumentRequest,
+    EditResultDto, OpenDocumentRequest, RevisionedDocumentReference, SaveDocumentRequest,
 };
 
 type SharedEditorRuntime = EditorRuntime<LocalFileSystem>;
@@ -56,6 +56,7 @@ pub fn edit_document(
     state
         .edit_document(EditDocument {
             document_id: DocumentId::new(request.document_id),
+            expected_revision: request.expected_revision.map(RevisionId::new),
             edit,
         })
         .map(Into::into)
@@ -65,10 +66,13 @@ pub fn edit_document(
 #[tauri::command]
 pub fn undo_document(
     state: State<'_, SharedEditorRuntime>,
-    request: DocumentReference,
+    request: RevisionedDocumentReference,
 ) -> Result<EditResultDto, String> {
     state
-        .undo_document(DocumentId::new(request.document_id))
+        .undo_document_with_revision(
+            DocumentId::new(request.document_id),
+            request.expected_revision.map(RevisionId::new),
+        )
         .map(Into::into)
         .map_err(|error| error.to_string())
 }
@@ -76,10 +80,13 @@ pub fn undo_document(
 #[tauri::command]
 pub fn redo_document(
     state: State<'_, SharedEditorRuntime>,
-    request: DocumentReference,
+    request: RevisionedDocumentReference,
 ) -> Result<EditResultDto, String> {
     state
-        .redo_document(DocumentId::new(request.document_id))
+        .redo_document_with_revision(
+            DocumentId::new(request.document_id),
+            request.expected_revision.map(RevisionId::new),
+        )
         .map(Into::into)
         .map_err(|error| error.to_string())
 }
@@ -92,6 +99,7 @@ pub fn save_document(
     state
         .save_document(SaveDocument {
             document_id: DocumentId::new(request.document_id),
+            expected_revision: request.expected_revision.map(RevisionId::new),
             path: request.path.map(PathBuf::from),
         })
         .map(Into::into)

@@ -16,6 +16,7 @@ fn unsaved_edits_remain_in_backend_state_until_explicit_save() {
     service
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
                 text: " beta".to_string(),
@@ -39,6 +40,7 @@ fn explicit_save_persists_current_backend_state_to_filesystem() {
     service
         .edit_document(EditDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
                 text: " updated".to_string(),
@@ -49,6 +51,7 @@ fn explicit_save_persists_current_backend_state_to_filesystem() {
     let saved = service
         .save_document(SaveDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             path: None,
         })
         .unwrap();
@@ -68,6 +71,7 @@ fn explicit_save_without_path_stays_an_application_error() {
     let error = service
         .save_document(SaveDocument {
             document_id: snapshot.document_id,
+            expected_revision: None,
             path: None,
         })
         .unwrap_err();
