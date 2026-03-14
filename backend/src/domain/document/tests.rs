@@ -1,6 +1,6 @@
 use super::{
-    CursorMove, Document, DocumentError, DocumentId, Edit, NewlineMode, Position, RevisionId,
-    Selection, TextOffset, TextRange,
+    CursorMove, Document, DocumentError, DocumentId, Edit, NewlineMode, PieceTree, Position,
+    RevisionId, Selection, TextOffset, TextRange, TextBuffer,
 };
 
 #[test]
@@ -235,6 +235,16 @@ fn line_index_remains_correct_after_inserting_leading_newline() {
 }
 
 #[test]
+fn piece_tree_tracks_subtree_metadata_for_bytes_and_newlines() {
+    let mut tree = PieceTree::new("alpha\nbeta");
+
+    tree.insert(TextOffset::new(0), "\n").unwrap();
+
+    assert_eq!(tree.len_bytes(), "alpha\nbeta".len() + 1);
+    assert_eq!(tree.subtree_newlines(), 2);
+}
+
+#[test]
 fn line_index_maps_positions_to_offsets() {
     let document = Document::open(DocumentId::new(7), "alpha\nbeta\n🙂z");
 
@@ -327,6 +337,55 @@ fn property_style_edit_sequence_matches_string_model() {
 }
 
 #[test]
+fn stress_edit_sequence_matches_string_model_over_many_steps() {
+    let mut document = Document::open(DocumentId::new(20), "seed");
+    let mut expected = String::from("seed");
+    let mut state = 0x1234_5678_9abc_def0u64;
+
+    for step in 0..400 {
+        let edit_kind = next_u64(&mut state) % 3;
+
+        match edit_kind {
+            0 => {
+                let offset = boundary_offset(&expected, &mut state);
+                let text = generated_fragment(&mut state, step);
+                expected.insert_str(offset, &text);
+                document
+                    .apply_edit(Edit::Insert {
+                        offset: TextOffset::new(offset),
+                        text,
+                    })
+                    .unwrap();
+            }
+            1 if !expected.is_empty() => {
+                let start = boundary_offset_before_end(&expected, &mut state);
+                let end = boundary_offset_after(&expected, start, &mut state);
+                expected.replace_range(start..end, "");
+                document
+                    .apply_edit(Edit::Delete {
+                        range: TextRange::new(TextOffset::new(start), TextOffset::new(end)).unwrap(),
+                    })
+                    .unwrap();
+            }
+            _ => {
+                let start = boundary_offset(&expected, &mut state);
+                let end = boundary_offset_after(&expected, start, &mut state);
+                let text = generated_fragment(&mut state, step);
+                expected.replace_range(start..end, &text);
+                document
+                    .apply_edit(Edit::Replace {
+                        range: TextRange::new(TextOffset::new(start), TextOffset::new(end)).unwrap(),
+                        text,
+                    })
+                    .unwrap();
+            }
+        }
+
+        assert_eq!(document.text(), expected);
+    }
+}
+
+#[test]
 fn newline_regression_preserves_detected_crlf_mode() {
     let mut document = Document::open(DocumentId::new(17), "one\r\ntwo\r\n");
 
@@ -393,4 +452,45 @@ fn edit_rejects_non_boundary_utf8_offset() {
             offset: TextOffset::new(2),
         }
     );
+}
+
+fn next_u64(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *state
+}
+
+fn boundary_offset(text: &str, state: &mut u64) -> usize {
+    let boundaries: Vec<usize> = text
+        .char_indices()
+        .map(|(offset, _)| offset)
+        .chain(std::iter::once(text.len()))
+        .collect();
+    boundaries[(next_u64(state) as usize) % boundaries.len()]
+}
+
+fn boundary_offset_before_end(text: &str, state: &mut u64) -> usize {
+    let boundaries: Vec<usize> = text.char_indices().map(|(offset, _)| offset).collect();
+    if boundaries.is_empty() {
+        return 0;
+    }
+    boundaries[(next_u64(state) as usize) % boundaries.len()]
+}
+
+fn boundary_offset_after(text: &str, start: usize, state: &mut u64) -> usize {
+    let boundaries: Vec<usize> = text
+        .char_indices()
+        .map(|(offset, _)| offset)
+        .chain(std::iter::once(text.len()))
+        .filter(|offset| *offset >= start)
+        .collect();
+    boundaries[(next_u64(state) as usize) % boundaries.len()]
+}
+
+fn generated_fragment(state: &mut u64, step: usize) -> String {
+    let variants = ["x", "yz", "\n", "🙂", "ab\n", "Q"];
+    let first = variants[(next_u64(state) as usize + step) % variants.len()];
+    let second = variants[(next_u64(state) as usize) % variants.len()];
+    format!("{first}{second}")
 }

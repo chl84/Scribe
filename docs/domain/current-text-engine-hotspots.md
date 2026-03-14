@@ -21,9 +21,10 @@ The current baseline suite measures:
 
 ## Current Interpretation
 
-- Insert and delete are acceptable for the current milestone but still depend on a linear piece list.
-- Line lookup is already materially slower than insert in the current baseline and should be watched closely.
-- Snapshot materialization is the clearest structural hotspot in the current suite and is already in the millisecond range per call on the local machine.
+- Insert and replace are currently acceptable in the local baseline.
+- Line lookup and reverse position lookup improved significantly with the piece tree.
+- Delete is now the clearest hot path regression and should be treated as the first storage-level optimization target.
+- Snapshot materialization remains a structural hotspot and is still in the millisecond range per call on the local machine.
 
 ## Why This Matters
 
@@ -36,4 +37,4 @@ The current model is a reasonable correctness-first foundation, but it is not li
 
 ## Next Step
 
-The next storage design should eliminate linear hot paths where possible and reduce the need for full-document materialization during normal editing and rendering.
+The next storage work should improve delete performance and reduce the need for full-document materialization during normal editing and rendering.

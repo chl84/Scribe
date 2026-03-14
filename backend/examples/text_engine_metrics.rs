@@ -9,7 +9,9 @@ fn main() {
     let measurements = vec![
         measure_insert_workload(),
         measure_delete_workload(),
+        measure_replace_workload(),
         measure_line_lookup_workload(),
+        measure_position_lookup_workload(),
         measure_snapshot_materialization_workload(),
     ];
 
@@ -103,8 +105,49 @@ fn measure_line_lookup_workload() -> Measurement {
     Measurement::new("line_lookup", 10_000, start.elapsed())
 }
 
+fn measure_replace_workload() -> Measurement {
+    let mut document = Document::open(DocumentId::new(4), make_fixture_text(20_000, 40));
+    let iterations = 1_000usize;
+    let start = Instant::now();
+
+    for _ in 0..iterations {
+        let line_start = document
+            .line_start_offset(document.line_count() / 2)
+            .expect("middle line offset should exist");
+        let range = TextRange::new(line_start, line_start.checked_add(6))
+            .expect("replace range should be valid");
+
+        black_box(
+            document
+                .apply_edit(Edit::Replace {
+                    range,
+                    text: "scribe".to_string(),
+                })
+                .expect("replace workload should succeed"),
+        );
+    }
+
+    Measurement::new("replace", iterations, start.elapsed())
+}
+
+fn measure_position_lookup_workload() -> Measurement {
+    let document = Document::open(DocumentId::new(5), make_fixture_text(50_000, 32));
+    let positions = build_lookup_positions(&document, 10_000);
+    let start = Instant::now();
+
+    for (line, column) in positions {
+        black_box(
+            document
+                .position_to_offset(scribe_backend::domain::document::Position::new(line, column))
+                .expect("position lookup should succeed"),
+        );
+    }
+
+    Measurement::new("position_lookup", 10_000, start.elapsed())
+}
+
 fn measure_snapshot_materialization_workload() -> Measurement {
-    let document = Document::open(DocumentId::new(4), make_fixture_text(50_000, 48));
+    let document = Document::open(DocumentId::new(6), make_fixture_text(50_000, 48));
     let iterations = 200usize;
     let start = Instant::now();
 
@@ -128,6 +171,18 @@ fn build_lookup_offsets(document: &Document, iterations: usize) -> Vec<TextOffse
     }
 
     offsets
+}
+
+fn build_lookup_positions(document: &Document, iterations: usize) -> Vec<(usize, usize)> {
+    let line_count = document.line_count();
+    let mut positions = Vec::with_capacity(iterations);
+
+    for iteration in 0..iterations {
+        let line = (iteration * 37) % line_count;
+        positions.push((line, 8));
+    }
+
+    positions
 }
 
 fn make_fixture_text(line_count: usize, line_len: usize) -> String {

@@ -1,6 +1,6 @@
 use super::{
     ChangeSet, CursorMove, CursorMoveRules, DocumentError, DocumentId, Edit, LineIndex,
-    NewlinePolicy, PieceTable, Position, RevisionId, Selection, TextBuffer, TextOffset, TextRange,
+    NewlinePolicy, PieceTree, Position, RevisionId, Selection, TextBuffer, TextOffset, TextRange,
     TextSnapshot, UndoManager,
 };
 
@@ -8,7 +8,7 @@ use super::{
 pub struct Document {
     id: DocumentId,
     revision: RevisionId,
-    buffer: PieceTable,
+    buffer: PieceTree,
     line_index: LineIndex,
     history: UndoManager,
     newline_policy: NewlinePolicy,
@@ -18,7 +18,7 @@ impl Document {
     pub fn open(id: DocumentId, text: impl Into<String>) -> Self {
         let text = text.into();
         let newline_policy = NewlinePolicy::detect(&text);
-        let buffer = PieceTable::new(text);
+        let buffer = PieceTree::new(text);
         let line_index = LineIndex::from_snapshot(&buffer.snapshot());
 
         Self {

@@ -8,17 +8,17 @@ Replace the current text-buffer hot path with a structure that can scale to very
 
 - [x] Evaluate the current piece-table hot paths with actual measurements.
 - [x] Design the replacement structure as a balanced piece tree or equivalent editor-oriented tree.
-- [ ] Keep byte offsets as the internal source of truth.
-- [ ] Store subtree metadata needed for fast operations:
+- [x] Keep byte offsets as the internal source of truth.
+- [x] Store subtree metadata needed for fast operations:
   - byte length
   - line count
   - newline boundaries
   - optional lightweight hashes for change detection
-- [ ] Preserve the current `Document` abstraction while swapping internal storage.
+- [x] Preserve the current `Document` abstraction while swapping internal storage.
 - [ ] Remove full-document snapshot materialization from common edit paths where practical.
-- [ ] Keep undo/redo transaction-based and backend-owned.
-- [ ] Add stress tests comparing the new engine to a simple string model.
-- [ ] Benchmark insert, delete, replace, navigation, and line mapping after the engine swap.
+- [x] Keep undo/redo transaction-based and backend-owned.
+- [x] Add stress tests comparing the new engine to a simple string model.
+- [x] Benchmark insert, delete, replace, navigation, and line mapping after the engine swap.
 
 ## Exit Criteria
 
@@ -31,3 +31,4 @@ Replace the current text-buffer hot path with a structure that can scale to very
 - The current hotspot summary is documented in `docs/domain/current-text-engine-hotspots.md`.
 - The measurement suite now includes snapshot materialization so the current full-text read cost stays visible.
 - The storage direction is recorded in `docs/decisions/0002-adopt-piece-tree-for-performance-core.md`.
+- The active implementation now uses a piece tree, but snapshot materialization and delete performance still need follow-up work.
