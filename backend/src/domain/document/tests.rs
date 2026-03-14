@@ -213,6 +213,28 @@ fn line_index_maps_offsets_to_positions() {
 }
 
 #[test]
+fn line_index_remains_correct_after_inserting_leading_newline() {
+    let mut document = Document::open(DocumentId::new(19), "alpha");
+
+    document
+        .apply_edit(Edit::Insert {
+            offset: TextOffset::new(0),
+            text: "\n".to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(document.line_count(), 2);
+    assert_eq!(
+        document.offset_to_position(TextOffset::new(1)).unwrap(),
+        Position::new(1, 0)
+    );
+    assert_eq!(
+        document.position_to_offset(Position::new(1, 0)).unwrap(),
+        TextOffset::new(1)
+    );
+}
+
+#[test]
 fn line_index_maps_positions_to_offsets() {
     let document = Document::open(DocumentId::new(7), "alpha\nbeta\n🙂z");
 

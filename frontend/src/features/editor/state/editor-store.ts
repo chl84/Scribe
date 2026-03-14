@@ -11,8 +11,8 @@ import {
   ensureTauriRuntime,
   TauriCommandError,
 } from "../../../shared/ipc/tauri";
-import { utf8ByteLength } from "../../../shared/utils/utf8";
 import type { DocumentSnapshotDto } from "../../../shared/types/editor";
+import { deriveEditCommand } from "../commands/text-edit";
 
 export interface EditorState {
   status: "booting" | "ready" | "syncing" | "error";
@@ -32,62 +32,87 @@ const initialState: EditorState = {
 
 function createEditorStore() {
   const store = writable<EditorState>(initialState);
-  let syncInFlight = false;
-  let syncQueued = false;
+  let activeSync: Promise<void> | null = null;
 
-  function setReady(snapshot: DocumentSnapshotDto): void {
+  function setSnapshot(snapshot: DocumentSnapshotDto, draftText = snapshot.text): void {
     store.set({
       status: "ready",
       snapshot,
-      draftText: snapshot.text,
-      isDirty: false,
+      draftText,
+      isDirty: draftText !== snapshot.text,
       error: null,
     });
   }
 
-  async function refresh(documentId: number): Promise<void> {
+  async function refresh(
+    documentId: number,
+    options: {
+      preserveDraft?: boolean;
+    } = {},
+  ): Promise<void> {
     const snapshot = await getDocument(documentId);
-    setReady(snapshot);
+    const draftText = options.preserveDraft ? get(store).draftText : snapshot.text;
+    setSnapshot(snapshot, draftText);
   }
 
-  async function flushSync(): Promise<void> {
-    const state = get(store);
+  async function processSyncLoop(): Promise<void> {
+    while (true) {
+      const state = get(store);
 
-    if (!state.snapshot || syncInFlight || state.draftText === state.snapshot.text) {
-      return;
-    }
+      if (!state.snapshot || state.draftText === state.snapshot.text) {
+        store.update((current) => ({
+          ...current,
+          status: current.snapshot ? "ready" : current.status,
+        }));
+        return;
+      }
 
-    syncInFlight = true;
-    store.update((current) => ({
-      ...current,
-      status: "syncing",
-      error: null,
-    }));
+      const edit = deriveEditCommand(state.snapshot.text, state.draftText);
 
-    try {
-      await editDocument(state.snapshot.document_id, {
-        kind: "replace",
-        start: 0,
-        end: utf8ByteLength(state.snapshot.text),
-        text: state.draftText,
-      });
-
-      await refresh(state.snapshot.document_id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      if (!edit) {
+        store.update((current) => ({
+          ...current,
+          status: current.snapshot ? "ready" : current.status,
+          isDirty: false,
+        }));
+        return;
+      }
 
       store.update((current) => ({
         ...current,
-        status: "error",
-        error: message,
+        status: "syncing",
+        error: null,
       }));
-    } finally {
-      syncInFlight = false;
 
-      if (syncQueued) {
-        syncQueued = false;
-        await flushSync();
+      try {
+        await editDocument(state.snapshot.document_id, edit);
+        await refresh(state.snapshot.document_id, { preserveDraft: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        store.update((current) => ({
+          ...current,
+          status: "error",
+          error: message,
+        }));
+        return;
       }
+    }
+  }
+
+  function scheduleSync(): Promise<void> {
+    if (!activeSync) {
+      activeSync = processSyncLoop().finally(() => {
+        activeSync = null;
+      });
+    }
+
+    return activeSync;
+  }
+
+  async function waitForSync(): Promise<void> {
+    if (activeSync) {
+      await activeSync;
     }
   }
 
@@ -98,7 +123,7 @@ function createEditorStore() {
       try {
         ensureTauriRuntime();
         const snapshot = await createScratchDocument();
-        setReady(snapshot);
+        setSnapshot(snapshot);
       } catch (error) {
         const message =
           error instanceof TauriCommandError || error instanceof Error
@@ -121,15 +146,11 @@ function createEditorStore() {
         error: null,
       }));
 
-      if (syncInFlight) {
-        syncQueued = true;
-        return;
-      }
-
-      void flushSync();
+      void scheduleSync();
     },
 
     async undo(): Promise<void> {
+      await waitForSync();
       const state = get(store);
 
       if (!state.snapshot) {
@@ -153,6 +174,7 @@ function createEditorStore() {
     },
 
     async redo(): Promise<void> {
+      await waitForSync();
       const state = get(store);
 
       if (!state.snapshot) {

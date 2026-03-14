@@ -112,10 +112,11 @@ impl LineIndex {
             }
         }
 
+        let inserted_count = inserted_starts.len();
         self.line_starts.splice(start_index..end_index, inserted_starts);
 
-        for line_start in &mut self.line_starts[start_index..] {
-            if line_start.value() > change_start.value() && line_start.value() > change_end.value() {
+        for line_start in &mut self.line_starts[start_index + inserted_count..] {
+            if line_start.value() > change_end.value() {
                 *line_start = TextOffset::new(((line_start.value() as isize) + delta) as usize);
             }
         }
