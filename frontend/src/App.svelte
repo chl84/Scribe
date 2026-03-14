@@ -1,5 +1,5 @@
-<svelte:head>
-  <title>Scribe</title>
-</svelte:head>
+<script lang="ts">
+  import EditorView from "./features/editor/views/EditorView.svelte";
+</script>
 
-<main aria-label="Scribe window"></main>
+<EditorView />
