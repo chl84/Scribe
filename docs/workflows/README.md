@@ -5,3 +5,4 @@ This directory is used for development workflows, release workflows, and other r
 Current workflow plans:
 
 - [text-engine/README.md](./text-engine/README.md)
+- [performance-editor/README.md](./performance-editor/README.md)
