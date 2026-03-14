@@ -2,19 +2,24 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::application::commands::{
-    DocumentSnapshot, EditDocument, EditResult, PerformanceTelemetry, SaveDocument,
+    CreateViewport, DocumentSnapshot, EditDocument, EditResult, PerformanceTelemetry, SaveDocument,
+    ScrollViewport, ViewportLine, ViewportSnapshot,
 };
-use crate::application::state::{DocumentEntry, DocumentStore};
-use crate::domain::document::{Document, DocumentError, DocumentId, RevisionId};
+use crate::application::state::{DocumentEntry, DocumentStore, ViewportStore};
+use crate::domain::document::{
+    Document, DocumentError, DocumentSessionId, RevisionId, TextOffset, TextRange,
+    ViewportSessionId,
+};
 use crate::infrastructure::filesystem::FileSystem;
 
 #[derive(Debug)]
 pub enum EditorServiceError {
     Document(DocumentError),
-    DocumentNotFound(DocumentId),
-    MissingDocumentPath(DocumentId),
+    DocumentSessionNotFound(DocumentSessionId),
+    ViewportSessionNotFound(ViewportSessionId),
+    MissingDocumentPath(DocumentSessionId),
     StaleRevision {
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected: RevisionId,
         actual: RevisionId,
     },
@@ -25,20 +30,35 @@ impl std::fmt::Display for EditorServiceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Document(error) => write!(f, "{error}"),
-            Self::DocumentNotFound(document_id) => {
-                write!(f, "document {} is not open", document_id.value())
+            Self::DocumentSessionNotFound(document_session_id) => {
+                write!(
+                    f,
+                    "document session {} is not open",
+                    document_session_id.value()
+                )
             }
-            Self::MissingDocumentPath(document_id) => {
-                write!(f, "document {} has no file path", document_id.value())
+            Self::ViewportSessionNotFound(viewport_session_id) => {
+                write!(
+                    f,
+                    "viewport session {} is not open",
+                    viewport_session_id.value()
+                )
+            }
+            Self::MissingDocumentPath(document_session_id) => {
+                write!(
+                    f,
+                    "document session {} has no file path",
+                    document_session_id.value()
+                )
             }
             Self::StaleRevision {
-                document_id,
+                document_session_id,
                 expected,
                 actual,
             } => write!(
                 f,
-                "stale revision for document {}: expected {}, actual {}",
-                document_id.value(),
+                "stale revision for document session {}: expected {}, actual {}",
+                document_session_id.value(),
                 expected.value(),
                 actual.value()
             ),
@@ -57,6 +77,7 @@ impl From<DocumentError> for EditorServiceError {
 
 pub struct EditorService<F: FileSystem> {
     store: DocumentStore,
+    viewport_store: ViewportStore,
     filesystem: F,
 }
 
@@ -64,6 +85,7 @@ impl<F: FileSystem> EditorService<F> {
     pub fn new(filesystem: F) -> Self {
         Self {
             store: DocumentStore::default(),
+            viewport_store: ViewportStore::default(),
             filesystem,
         }
     }
@@ -71,11 +93,18 @@ impl<F: FileSystem> EditorService<F> {
     pub fn create_document(&mut self, text: impl Into<String>) -> DocumentSnapshot {
         let id = self.store.next_document_id();
         let document = Document::open(id, text);
-        let snapshot = DocumentSnapshot::from_document(&document, None);
-        let mut entry = DocumentEntry::new(document, None);
+        self.store.insert(DocumentEntry::new(document, None));
+        let session_id = self
+            .store
+            .open_session(id)
+            .expect("document session should exist after insert");
+        let entry = self
+            .store
+            .get_mut(id)
+            .expect("inserted document should exist");
+        let snapshot = DocumentSnapshot::from_document(entry.document(), session_id, None);
         entry.cache_snapshot(snapshot.clone());
 
-        self.store.insert(entry);
         log::info!("editor.create document_id={}", snapshot.document_id.value());
 
         snapshot
@@ -92,11 +121,19 @@ impl<F: FileSystem> EditorService<F> {
             .map_err(|error| EditorServiceError::FileSystem(error.to_string()))?;
         let id = self.store.next_document_id();
         let document = Document::open(id, contents);
-        let snapshot = DocumentSnapshot::from_document(&document, Some(path.clone()));
-        let mut entry = DocumentEntry::new(document, Some(path));
+        self.store
+            .insert(DocumentEntry::new(document, Some(path.clone())));
+        let session_id = self
+            .store
+            .open_session(id)
+            .expect("document session should exist after insert");
+        let entry = self
+            .store
+            .get_mut(id)
+            .expect("inserted document should exist");
+        let snapshot = DocumentSnapshot::from_document(entry.document(), session_id, Some(path));
         entry.cache_snapshot(snapshot.clone());
 
-        self.store.insert(entry);
         log::info!(
             "editor.open document_id={} path={}",
             snapshot.document_id.value(),
@@ -112,22 +149,34 @@ impl<F: FileSystem> EditorService<F> {
 
     pub fn get_document(
         &mut self,
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
     ) -> Result<DocumentSnapshot, EditorServiceError> {
-        let entry = self
-            .store
-            .get_mut(document_id)
-            .ok_or(EditorServiceError::DocumentNotFound(document_id))?;
+        let document_id = self.store.resolve_session(document_session_id).ok_or(
+            EditorServiceError::DocumentSessionNotFound(document_session_id),
+        )?;
+        let entry =
+            self.store
+                .get_mut(document_id)
+                .ok_or(EditorServiceError::DocumentSessionNotFound(
+                    document_session_id,
+                ))?;
         let snapshot_started_at = Instant::now();
 
         if let Some(snapshot) = entry.cached_snapshot() {
-            return Ok(snapshot.clone().with_telemetry(PerformanceTelemetry {
-                document_operation_nanos: None,
-                snapshot_build_nanos: Some(0),
-            }));
+            return Ok(snapshot
+                .clone()
+                .with_document_session_id(document_session_id)
+                .with_telemetry(PerformanceTelemetry {
+                    document_operation_nanos: None,
+                    snapshot_build_nanos: Some(0),
+                }));
         }
 
-        let snapshot = DocumentSnapshot::from_document(entry.document(), entry.path().cloned());
+        let snapshot = DocumentSnapshot::from_document(
+            entry.document(),
+            document_session_id,
+            entry.path().cloned(),
+        );
         let build_nanos = snapshot_started_at.elapsed().as_nanos() as u64;
         entry.cache_snapshot(snapshot.clone());
 
@@ -141,12 +190,20 @@ impl<F: FileSystem> EditorService<F> {
         &mut self,
         command: EditDocument,
     ) -> Result<EditResult, EditorServiceError> {
-        let document = self
+        let document_id = self
             .store
-            .get_mut(command.document_id)
-            .ok_or(EditorServiceError::DocumentNotFound(command.document_id))?;
+            .resolve_session(command.document_session_id)
+            .ok_or(EditorServiceError::DocumentSessionNotFound(
+                command.document_session_id,
+            ))?;
+        let document =
+            self.store
+                .get_mut(document_id)
+                .ok_or(EditorServiceError::DocumentSessionNotFound(
+                    command.document_session_id,
+                ))?;
         ensure_revision_matches(
-            command.document_id,
+            command.document_session_id,
             command.expected_revision,
             document.document().revision(),
         )?;
@@ -160,12 +217,13 @@ impl<F: FileSystem> EditorService<F> {
         };
         log::info!(
             "editor.edit document_id={} revision={} changes=1",
-            command.document_id.value(),
+            document_id.value(),
             document.document().revision().value()
         );
 
         Ok(EditResult {
-            document_id: command.document_id,
+            document_session_id: command.document_session_id,
+            document_id,
             changes: vec![change],
             telemetry,
         })
@@ -173,15 +231,20 @@ impl<F: FileSystem> EditorService<F> {
 
     pub fn undo_document(
         &mut self,
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected_revision: Option<RevisionId>,
     ) -> Result<EditResult, EditorServiceError> {
-        let document = self
-            .store
-            .get_mut(document_id)
-            .ok_or(EditorServiceError::DocumentNotFound(document_id))?;
+        let document_id = self.store.resolve_session(document_session_id).ok_or(
+            EditorServiceError::DocumentSessionNotFound(document_session_id),
+        )?;
+        let document =
+            self.store
+                .get_mut(document_id)
+                .ok_or(EditorServiceError::DocumentSessionNotFound(
+                    document_session_id,
+                ))?;
         ensure_revision_matches(
-            document_id,
+            document_session_id,
             expected_revision,
             document.document().revision(),
         )?;
@@ -199,6 +262,7 @@ impl<F: FileSystem> EditorService<F> {
         );
 
         Ok(EditResult {
+            document_session_id,
             document_id,
             changes,
             telemetry,
@@ -207,15 +271,20 @@ impl<F: FileSystem> EditorService<F> {
 
     pub fn redo_document(
         &mut self,
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected_revision: Option<RevisionId>,
     ) -> Result<EditResult, EditorServiceError> {
-        let document = self
-            .store
-            .get_mut(document_id)
-            .ok_or(EditorServiceError::DocumentNotFound(document_id))?;
+        let document_id = self.store.resolve_session(document_session_id).ok_or(
+            EditorServiceError::DocumentSessionNotFound(document_session_id),
+        )?;
+        let document =
+            self.store
+                .get_mut(document_id)
+                .ok_or(EditorServiceError::DocumentSessionNotFound(
+                    document_session_id,
+                ))?;
         ensure_revision_matches(
-            document_id,
+            document_session_id,
             expected_revision,
             document.document().revision(),
         )?;
@@ -233,6 +302,7 @@ impl<F: FileSystem> EditorService<F> {
         );
 
         Ok(EditResult {
+            document_session_id,
             document_id,
             changes,
             telemetry,
@@ -243,29 +313,40 @@ impl<F: FileSystem> EditorService<F> {
         &mut self,
         command: SaveDocument,
     ) -> Result<DocumentSnapshot, EditorServiceError> {
-        let entry = self
+        let document_id = self
             .store
-            .get_mut(command.document_id)
-            .ok_or(EditorServiceError::DocumentNotFound(command.document_id))?;
+            .resolve_session(command.document_session_id)
+            .ok_or(EditorServiceError::DocumentSessionNotFound(
+                command.document_session_id,
+            ))?;
+        let entry =
+            self.store
+                .get_mut(document_id)
+                .ok_or(EditorServiceError::DocumentSessionNotFound(
+                    command.document_session_id,
+                ))?;
         ensure_revision_matches(
-            command.document_id,
+            command.document_session_id,
             command.expected_revision,
             entry.document().revision(),
         )?;
-        let path = command
-            .path
-            .or_else(|| entry.path().cloned())
-            .ok_or(EditorServiceError::MissingDocumentPath(command.document_id))?;
+        let path = command.path.or_else(|| entry.path().cloned()).ok_or(
+            EditorServiceError::MissingDocumentPath(command.document_session_id),
+        )?;
 
         self.filesystem
             .write_string(&path, &entry.document().text())
             .map_err(|error| EditorServiceError::FileSystem(error.to_string()))?;
         entry.set_path(Some(path.clone()));
-        let snapshot = DocumentSnapshot::from_document(entry.document(), Some(path));
+        let snapshot = DocumentSnapshot::from_document(
+            entry.document(),
+            command.document_session_id,
+            Some(path),
+        );
         entry.cache_snapshot(snapshot.clone());
         log::info!(
             "editor.save document_id={} path={}",
-            command.document_id.value(),
+            document_id.value(),
             snapshot
                 .path
                 .as_ref()
@@ -276,25 +357,110 @@ impl<F: FileSystem> EditorService<F> {
         Ok(snapshot)
     }
 
-    pub fn close_document(&mut self, document_id: DocumentId) -> Result<(), EditorServiceError> {
+    pub fn close_document(
+        &mut self,
+        document_session_id: DocumentSessionId,
+    ) -> Result<(), EditorServiceError> {
+        let (document_id, should_remove_document) =
+            self.store.close_session(document_session_id).ok_or(
+                EditorServiceError::DocumentSessionNotFound(document_session_id),
+            )?;
+
+        if should_remove_document {
+            self.store.remove(document_id);
+        }
+
+        log::info!(
+            "editor.close document_session_id={} document_id={}",
+            document_session_id.value(),
+            document_id.value()
+        );
+
+        Ok(())
+    }
+
+    pub fn create_viewport(
+        &mut self,
+        command: CreateViewport,
+    ) -> Result<ViewportSnapshot, EditorServiceError> {
         self.store
-            .remove(document_id)
-            .map(|_| {
-                log::info!("editor.close document_id={}", document_id.value());
-            })
-            .ok_or(EditorServiceError::DocumentNotFound(document_id))
+            .resolve_session(command.document_session_id)
+            .ok_or(EditorServiceError::DocumentSessionNotFound(
+                command.document_session_id,
+            ))?;
+
+        let viewport_session_id = self.viewport_store.create_viewport(
+            command.document_session_id,
+            command.top_line,
+            command.visible_line_count,
+        );
+
+        self.get_viewport(viewport_session_id)
+    }
+
+    pub fn get_viewport(
+        &mut self,
+        viewport_session_id: ViewportSessionId,
+    ) -> Result<ViewportSnapshot, EditorServiceError> {
+        let viewport = self
+            .viewport_store
+            .get(viewport_session_id)
+            .ok_or(EditorServiceError::ViewportSessionNotFound(
+                viewport_session_id,
+            ))?
+            .clone();
+        let started_at = Instant::now();
+        let document_id = self
+            .store
+            .resolve_session(viewport.document_session_id())
+            .ok_or(EditorServiceError::DocumentSessionNotFound(
+                viewport.document_session_id(),
+            ))?;
+        let entry =
+            self.store
+                .get_mut(document_id)
+                .ok_or(EditorServiceError::DocumentSessionNotFound(
+                    viewport.document_session_id(),
+                ))?;
+        let snapshot = build_viewport_snapshot(
+            entry.document(),
+            viewport_session_id,
+            viewport.document_session_id(),
+            viewport.top_line(),
+            viewport.visible_line_count(),
+        )?;
+
+        Ok(snapshot.with_telemetry(PerformanceTelemetry {
+            document_operation_nanos: None,
+            snapshot_build_nanos: Some(started_at.elapsed().as_nanos() as u64),
+        }))
+    }
+
+    pub fn scroll_viewport(
+        &mut self,
+        command: ScrollViewport,
+    ) -> Result<ViewportSnapshot, EditorServiceError> {
+        let viewport = self
+            .viewport_store
+            .get_mut(command.viewport_session_id)
+            .ok_or(EditorServiceError::ViewportSessionNotFound(
+                command.viewport_session_id,
+            ))?;
+        viewport.set_top_line(command.top_line);
+
+        self.get_viewport(command.viewport_session_id)
     }
 }
 
 fn ensure_revision_matches(
-    document_id: DocumentId,
+    document_session_id: DocumentSessionId,
     expected_revision: Option<RevisionId>,
     actual_revision: RevisionId,
 ) -> Result<(), EditorServiceError> {
     if let Some(expected_revision) = expected_revision {
         if expected_revision != actual_revision {
             return Err(EditorServiceError::StaleRevision {
-                document_id,
+                document_session_id,
                 expected: expected_revision,
                 actual: actual_revision,
             });
@@ -302,4 +468,56 @@ fn ensure_revision_matches(
     }
 
     Ok(())
+}
+
+fn build_viewport_snapshot(
+    document: &Document,
+    viewport_session_id: ViewportSessionId,
+    document_session_id: DocumentSessionId,
+    top_line: usize,
+    visible_line_count: usize,
+) -> Result<ViewportSnapshot, EditorServiceError> {
+    let document_line_count = document.line_count();
+    let clamped_top_line = if document_line_count == 0 {
+        0
+    } else {
+        top_line.min(document_line_count.saturating_sub(1))
+    };
+    let last_line = (clamped_top_line + visible_line_count).min(document_line_count);
+    let document_snapshot = document.snapshot();
+    let mut lines = Vec::with_capacity(last_line.saturating_sub(clamped_top_line));
+
+    for line_number in clamped_top_line..last_line {
+        let line_start = document
+            .line_start_offset(line_number)
+            .map_err(EditorServiceError::Document)?;
+        let line_end = if line_number + 1 < document_line_count {
+            document
+                .line_start_offset(line_number + 1)
+                .map_err(EditorServiceError::Document)?
+        } else {
+            TextOffset::new(document.len_bytes())
+        };
+        let line_text = document_snapshot
+            .slice(TextRange::new(line_start, line_end).map_err(EditorServiceError::Document)?)
+            .map_err(EditorServiceError::Document)?
+            .to_string();
+
+        lines.push(ViewportLine {
+            line_number,
+            text: line_text,
+        });
+    }
+
+    Ok(ViewportSnapshot {
+        viewport_session_id,
+        document_session_id,
+        document_id: document.id(),
+        revision: document.revision(),
+        top_line: clamped_top_line,
+        visible_line_count,
+        document_line_count,
+        lines,
+        telemetry: None,
+    })
 }

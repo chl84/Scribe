@@ -8,19 +8,21 @@ Remove backend coordination bottlenecks and redesign editor IPC for high-frequen
 
 - [x] Replace the single shared mutex around editor state with a dedicated editor runtime.
 - [x] Move document operations onto a dedicated backend thread or task runtime.
-- [ ] Introduce explicit document sessions and viewport sessions.
+- [x] Introduce explicit document sessions.
+- [x] Introduce explicit viewport sessions.
 - [x] Make document commands revision-aware.
 - [ ] Redesign IPC around high-frequency commands:
-  - `apply_edit`
-  - `move_cursor`
-  - `set_selection`
-  - `get_viewport`
-  - `scroll_viewport`
-  - `undo`
-  - `redo`
-  - `search`
+  - [ ] `apply_edit`
+  - [ ] `move_cursor`
+  - [ ] `set_selection`
+  - [x] `get_viewport`
+  - [x] `scroll_viewport`
+  - [x] `undo`
+  - [x] `redo`
+  - [ ] `search`
 - [ ] Stop using full-document refreshes for routine editing.
-- [ ] Return incremental payloads and stale-revision errors where appropriate.
+- [ ] Return incremental payloads where appropriate.
+- [x] Return stale-revision errors where appropriate.
 - [x] Cache immutable snapshots per revision when repeated reads would otherwise rebuild identical data.
 - [ ] Add integration tests for revision mismatches, concurrent command ordering, and repeated viewport reads.
 
@@ -37,3 +39,5 @@ Remove backend coordination bottlenecks and redesign editor IPC for high-frequen
 - Repeated `get_document` reads now reuse cached snapshots until a document mutation invalidates the revision.
 - `edit_document`, `undo_document`, `redo_document`, and `save_document` now accept optional expected revisions and reject stale callers explicitly.
 - Runtime tests now cover concurrent command ordering, repeated snapshot reads, and stale-revision propagation.
+- IPC and frontend state now address open documents through `document_session_id`, while `document_id` remains backend metadata.
+- The backend now exposes `create_viewport`, `get_viewport`, and `scroll_viewport` as a separate viewport-session path.

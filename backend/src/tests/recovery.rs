@@ -15,7 +15,7 @@ fn unsaved_edits_remain_in_backend_state_until_explicit_save() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -24,7 +24,7 @@ fn unsaved_edits_remain_in_backend_state_until_explicit_save() {
         })
         .unwrap();
 
-    let current = service.get_document(snapshot.document_id).unwrap();
+    let current = service.get_document(snapshot.document_session_id).unwrap();
 
     assert_eq!(current.text, "alpha beta");
     assert_eq!(current.path, Some(path.clone()));
@@ -39,7 +39,7 @@ fn explicit_save_persists_current_backend_state_to_filesystem() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -50,7 +50,7 @@ fn explicit_save_persists_current_backend_state_to_filesystem() {
 
     let saved = service
         .save_document(SaveDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             path: None,
         })
@@ -58,7 +58,10 @@ fn explicit_save_persists_current_backend_state_to_filesystem() {
 
     assert_eq!(saved.text, "draft updated");
     assert_eq!(
-        service.get_document(snapshot.document_id).unwrap().text,
+        service
+            .get_document(snapshot.document_session_id)
+            .unwrap()
+            .text,
         "draft updated"
     );
 }
@@ -70,7 +73,7 @@ fn explicit_save_without_path_stays_an_application_error() {
 
     let error = service
         .save_document(SaveDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             path: None,
         })
@@ -78,7 +81,7 @@ fn explicit_save_without_path_stays_an_application_error() {
 
     assert!(matches!(
         error,
-        EditorServiceError::MissingDocumentPath(document_id)
-        if document_id == snapshot.document_id
+        EditorServiceError::MissingDocumentPath(document_session_id)
+        if document_session_id == snapshot.document_session_id
     ));
 }

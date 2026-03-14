@@ -2,13 +2,14 @@ use std::path::PathBuf;
 
 use tauri::State;
 
-use crate::application::commands::{EditDocument, SaveDocument};
+use crate::application::commands::{CreateViewport, EditDocument, SaveDocument, ScrollViewport};
 use crate::application::runtime::EditorRuntime;
-use crate::domain::document::{DocumentId, RevisionId};
+use crate::domain::document::{DocumentSessionId, RevisionId, ViewportSessionId};
 use crate::infrastructure::filesystem::LocalFileSystem;
 use crate::interface::ipc::dto::{
-    CreateDocumentRequest, DocumentReference, DocumentSnapshotDto, EditDocumentRequest,
-    EditResultDto, OpenDocumentRequest, RevisionedDocumentReference, SaveDocumentRequest,
+    CreateDocumentRequest, CreateViewportRequest, DocumentReference, DocumentSnapshotDto,
+    EditDocumentRequest, EditResultDto, OpenDocumentRequest, RevisionedDocumentReference,
+    SaveDocumentRequest, ScrollViewportRequest, ViewportReference, ViewportSnapshotDto,
 };
 
 type SharedEditorRuntime = EditorRuntime<LocalFileSystem>;
@@ -41,7 +42,7 @@ pub fn get_document(
     request: DocumentReference,
 ) -> Result<DocumentSnapshotDto, String> {
     state
-        .get_document(DocumentId::new(request.document_id))
+        .get_document(DocumentSessionId::new(request.document_session_id))
         .map(Into::into)
         .map_err(|error| error.to_string())
 }
@@ -55,9 +56,49 @@ pub fn edit_document(
 
     state
         .edit_document(EditDocument {
-            document_id: DocumentId::new(request.document_id),
+            document_session_id: DocumentSessionId::new(request.document_session_id),
             expected_revision: request.expected_revision.map(RevisionId::new),
             edit,
+        })
+        .map(Into::into)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_viewport(
+    state: State<'_, SharedEditorRuntime>,
+    request: CreateViewportRequest,
+) -> Result<ViewportSnapshotDto, String> {
+    state
+        .create_viewport(CreateViewport {
+            document_session_id: DocumentSessionId::new(request.document_session_id),
+            top_line: request.top_line,
+            visible_line_count: request.visible_line_count,
+        })
+        .map(Into::into)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_viewport(
+    state: State<'_, SharedEditorRuntime>,
+    request: ViewportReference,
+) -> Result<ViewportSnapshotDto, String> {
+    state
+        .get_viewport(ViewportSessionId::new(request.viewport_session_id))
+        .map(Into::into)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn scroll_viewport(
+    state: State<'_, SharedEditorRuntime>,
+    request: ScrollViewportRequest,
+) -> Result<ViewportSnapshotDto, String> {
+    state
+        .scroll_viewport(ScrollViewport {
+            viewport_session_id: ViewportSessionId::new(request.viewport_session_id),
+            top_line: request.top_line,
         })
         .map(Into::into)
         .map_err(|error| error.to_string())
@@ -70,7 +111,7 @@ pub fn undo_document(
 ) -> Result<EditResultDto, String> {
     state
         .undo_document_with_revision(
-            DocumentId::new(request.document_id),
+            DocumentSessionId::new(request.document_session_id),
             request.expected_revision.map(RevisionId::new),
         )
         .map(Into::into)
@@ -84,7 +125,7 @@ pub fn redo_document(
 ) -> Result<EditResultDto, String> {
     state
         .redo_document_with_revision(
-            DocumentId::new(request.document_id),
+            DocumentSessionId::new(request.document_session_id),
             request.expected_revision.map(RevisionId::new),
         )
         .map(Into::into)
@@ -98,7 +139,7 @@ pub fn save_document(
 ) -> Result<DocumentSnapshotDto, String> {
     state
         .save_document(SaveDocument {
-            document_id: DocumentId::new(request.document_id),
+            document_session_id: DocumentSessionId::new(request.document_session_id),
             expected_revision: request.expected_revision.map(RevisionId::new),
             path: request.path.map(PathBuf::from),
         })
@@ -112,6 +153,6 @@ pub fn close_document(
     request: DocumentReference,
 ) -> Result<(), String> {
     state
-        .close_document(DocumentId::new(request.document_id))
+        .close_document(DocumentSessionId::new(request.document_session_id))
         .map_err(|error| error.to_string())
 }

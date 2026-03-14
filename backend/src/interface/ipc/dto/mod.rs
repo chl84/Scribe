@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::application::commands::{DocumentSnapshot, EditResult, PerformanceTelemetry};
+use crate::application::commands::{
+    DocumentSnapshot, EditResult, PerformanceTelemetry, ViewportLine, ViewportSnapshot,
+};
 use crate::domain::document::{ChangeSet, Edit, NewlineMode, TextOffset, TextRange};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,20 +17,38 @@ pub struct OpenDocumentRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaveDocumentRequest {
-    pub document_id: u64,
+    pub document_session_id: u64,
     pub expected_revision: Option<u64>,
     pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentReference {
-    pub document_id: u64,
+    pub document_session_id: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevisionedDocumentReference {
-    pub document_id: u64,
+    pub document_session_id: u64,
     pub expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateViewportRequest {
+    pub document_session_id: u64,
+    pub top_line: usize,
+    pub visible_line_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ViewportReference {
+    pub viewport_session_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrollViewportRequest {
+    pub viewport_session_id: u64,
+    pub top_line: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,13 +71,14 @@ pub enum EditCommandDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditDocumentRequest {
-    pub document_id: u64,
+    pub document_session_id: u64,
     pub expected_revision: Option<u64>,
     pub edit: EditCommandDto,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocumentSnapshotDto {
+    pub document_session_id: u64,
     pub document_id: u64,
     pub revision: u64,
     pub text: String,
@@ -70,6 +91,7 @@ pub struct DocumentSnapshotDto {
 impl From<DocumentSnapshot> for DocumentSnapshotDto {
     fn from(value: DocumentSnapshot) -> Self {
         Self {
+            document_session_id: value.document_session_id.value(),
             document_id: value.document_id.value(),
             revision: value.revision.value(),
             text: value.text,
@@ -109,6 +131,7 @@ impl From<ChangeSet> for ChangeSetDto {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct EditResultDto {
+    pub document_session_id: u64,
     pub document_id: u64,
     pub changes: Vec<ChangeSetDto>,
     pub telemetry: PerformanceTelemetryDto,
@@ -117,6 +140,7 @@ pub struct EditResultDto {
 impl From<EditResult> for EditResultDto {
     fn from(value: EditResult) -> Self {
         Self {
+            document_session_id: value.document_session_id.value(),
             document_id: value.document_id.value(),
             changes: value.changes.into_iter().map(ChangeSetDto::from).collect(),
             telemetry: PerformanceTelemetryDto::from(value.telemetry),
@@ -135,6 +159,50 @@ impl From<PerformanceTelemetry> for PerformanceTelemetryDto {
         Self {
             document_operation_nanos: value.document_operation_nanos,
             snapshot_build_nanos: value.snapshot_build_nanos,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ViewportLineDto {
+    pub line_number: usize,
+    pub text: String,
+}
+
+impl From<ViewportLine> for ViewportLineDto {
+    fn from(value: ViewportLine) -> Self {
+        Self {
+            line_number: value.line_number,
+            text: value.text,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ViewportSnapshotDto {
+    pub viewport_session_id: u64,
+    pub document_session_id: u64,
+    pub document_id: u64,
+    pub revision: u64,
+    pub top_line: usize,
+    pub visible_line_count: usize,
+    pub document_line_count: usize,
+    pub lines: Vec<ViewportLineDto>,
+    pub telemetry: Option<PerformanceTelemetryDto>,
+}
+
+impl From<ViewportSnapshot> for ViewportSnapshotDto {
+    fn from(value: ViewportSnapshot) -> Self {
+        Self {
+            viewport_session_id: value.viewport_session_id.value(),
+            document_session_id: value.document_session_id.value(),
+            document_id: value.document_id.value(),
+            revision: value.revision.value(),
+            top_line: value.top_line,
+            visible_line_count: value.visible_line_count,
+            document_line_count: value.document_line_count,
+            lines: value.lines.into_iter().map(ViewportLineDto::from).collect(),
+            telemetry: value.telemetry.map(PerformanceTelemetryDto::from),
         }
     }
 }

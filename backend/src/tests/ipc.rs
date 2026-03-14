@@ -1,10 +1,15 @@
 use std::path::PathBuf;
 
-use crate::application::commands::DocumentSnapshot;
-use crate::domain::document::{Document, DocumentId, Edit, RevisionId, TextOffset, TextRange};
+use crate::application::commands::{
+    DocumentSnapshot, PerformanceTelemetry, ViewportLine, ViewportSnapshot,
+};
+use crate::domain::document::{
+    Document, DocumentId, DocumentSessionId, Edit, RevisionId, TextOffset, TextRange,
+    ViewportSessionId,
+};
 use crate::interface::ipc::dto::{
     ChangeSetDto, DocumentSnapshotDto, EditCommandDto, EditDocumentRequest,
-    RevisionedDocumentReference, SaveDocumentRequest,
+    RevisionedDocumentReference, SaveDocumentRequest, ViewportSnapshotDto,
 };
 
 #[test]
@@ -35,10 +40,15 @@ fn edit_command_dto_maps_replace_commands() {
 #[test]
 fn document_snapshot_dto_serializes_editor_state_for_ipc() {
     let document = Document::open(DocumentId::new(9), "line one\r\nline two");
-    let snapshot = DocumentSnapshot::from_document(&document, Some(PathBuf::from("/tmp/doc.txt")));
+    let snapshot = DocumentSnapshot::from_document(
+        &document,
+        DocumentSessionId::new(21),
+        Some(PathBuf::from("/tmp/doc.txt")),
+    );
 
     let dto = DocumentSnapshotDto::from(snapshot);
 
+    assert_eq!(dto.document_session_id, 21);
     assert_eq!(dto.document_id, 9);
     assert_eq!(dto.revision, RevisionId::initial().value());
     assert_eq!(dto.text, "line one\r\nline two");
@@ -73,7 +83,7 @@ fn change_set_dto_preserves_revision_and_range_metadata() {
 #[test]
 fn revisioned_requests_capture_expected_revision_metadata() {
     let edit_request = EditDocumentRequest {
-        document_id: 4,
+        document_session_id: 4,
         expected_revision: Some(9),
         edit: EditCommandDto::Insert {
             offset: 0,
@@ -81,16 +91,66 @@ fn revisioned_requests_capture_expected_revision_metadata() {
         },
     };
     let undo_request = RevisionedDocumentReference {
-        document_id: 4,
+        document_session_id: 4,
         expected_revision: Some(9),
     };
     let save_request = SaveDocumentRequest {
-        document_id: 4,
+        document_session_id: 4,
         expected_revision: Some(9),
         path: None,
     };
 
+    assert_eq!(edit_request.document_session_id, 4);
     assert_eq!(edit_request.expected_revision, Some(9));
+    assert_eq!(undo_request.document_session_id, 4);
     assert_eq!(undo_request.expected_revision, Some(9));
+    assert_eq!(save_request.document_session_id, 4);
     assert_eq!(save_request.expected_revision, Some(9));
+}
+
+#[test]
+fn viewport_snapshot_dto_serializes_visible_lines() {
+    let viewport = ViewportSnapshot {
+        viewport_session_id: ViewportSessionId::new(7),
+        document_session_id: DocumentSessionId::new(4),
+        document_id: DocumentId::new(2),
+        revision: RevisionId::new(3),
+        top_line: 10,
+        visible_line_count: 2,
+        document_line_count: 42,
+        lines: vec![
+            ViewportLine {
+                line_number: 10,
+                text: "alpha\n".to_string(),
+            },
+            ViewportLine {
+                line_number: 11,
+                text: "beta".to_string(),
+            },
+        ],
+        telemetry: Some(PerformanceTelemetry {
+            document_operation_nanos: None,
+            snapshot_build_nanos: Some(120),
+        }),
+    };
+
+    let dto = ViewportSnapshotDto::from(viewport);
+
+    assert_eq!(dto.viewport_session_id, 7);
+    assert_eq!(dto.document_session_id, 4);
+    assert_eq!(dto.document_id, 2);
+    assert_eq!(dto.revision, 3);
+    assert_eq!(dto.top_line, 10);
+    assert_eq!(dto.visible_line_count, 2);
+    assert_eq!(dto.document_line_count, 42);
+    assert_eq!(dto.lines.len(), 2);
+    assert_eq!(dto.lines[0].line_number, 10);
+    assert_eq!(dto.lines[0].text, "alpha\n");
+    assert_eq!(dto.lines[1].line_number, 11);
+    assert_eq!(dto.lines[1].text, "beta");
+    assert_eq!(
+        dto.telemetry
+            .and_then(|telemetry| telemetry.snapshot_build_nanos),
+        Some(120)
+    );
 }

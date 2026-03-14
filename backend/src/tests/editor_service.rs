@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::application::commands::{EditDocument, SaveDocument};
 use crate::application::services::EditorService;
-use crate::domain::document::{DocumentId, Edit, TextOffset, TextRange};
+use crate::domain::document::{DocumentSessionId, Edit, TextOffset, TextRange};
 
 use super::support::{MemoryFileSystem, WritableMemoryFileSystem};
 
@@ -17,7 +17,7 @@ fn application_service_can_open_edit_and_save_document() {
 
     let result = service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -30,7 +30,7 @@ fn application_service_can_open_edit_and_save_document() {
 
     let saved = service
         .save_document(SaveDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             path: None,
         })
@@ -50,7 +50,7 @@ fn application_service_handles_large_document_round_trip() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(snapshot.text.len()),
@@ -61,7 +61,7 @@ fn application_service_handles_large_document_round_trip() {
 
     let saved = service
         .save_document(SaveDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             path: None,
         })
@@ -77,7 +77,7 @@ fn application_service_supports_undo_and_redo() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Replace {
                 range: TextRange::new(TextOffset::new(0), TextOffset::new(5)).unwrap(),
@@ -86,19 +86,29 @@ fn application_service_supports_undo_and_redo() {
         })
         .unwrap();
 
-    let undone = service.undo_document(snapshot.document_id, None).unwrap();
+    let undone = service
+        .undo_document(snapshot.document_session_id, None)
+        .unwrap();
     assert_eq!(undone.changes.len(), 1);
     assert!(undone.telemetry.document_operation_nanos.is_some());
     assert_eq!(
-        service.get_document(snapshot.document_id).unwrap().text,
+        service
+            .get_document(snapshot.document_session_id)
+            .unwrap()
+            .text,
         "hello"
     );
 
-    let redone = service.redo_document(snapshot.document_id, None).unwrap();
+    let redone = service
+        .redo_document(snapshot.document_session_id, None)
+        .unwrap();
     assert_eq!(redone.changes.len(), 1);
     assert!(redone.telemetry.document_operation_nanos.is_some());
     assert_eq!(
-        service.get_document(snapshot.document_id).unwrap().text,
+        service
+            .get_document(snapshot.document_session_id)
+            .unwrap()
+            .text,
         "scribe"
     );
 }
@@ -108,9 +118,13 @@ fn application_service_can_close_documents() {
     let mut service = EditorService::new(MemoryFileSystem::default());
     let snapshot = service.create_document("");
 
-    service.close_document(snapshot.document_id).unwrap();
+    service
+        .close_document(snapshot.document_session_id)
+        .unwrap();
 
-    assert!(service.get_document(DocumentId::new(1)).is_err());
+    assert!(service
+        .get_document(DocumentSessionId::new(snapshot.document_session_id.value()))
+        .is_err());
 }
 
 #[test]
@@ -118,8 +132,8 @@ fn application_service_reuses_cached_snapshot_for_repeated_reads() {
     let mut service = EditorService::new(MemoryFileSystem::default());
     let snapshot = service.create_document("hello");
 
-    let first = service.get_document(snapshot.document_id).unwrap();
-    let second = service.get_document(snapshot.document_id).unwrap();
+    let first = service.get_document(snapshot.document_session_id).unwrap();
+    let second = service.get_document(snapshot.document_session_id).unwrap();
 
     assert_eq!(first.text, "hello");
     assert_eq!(second.text, "hello");

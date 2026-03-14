@@ -14,21 +14,21 @@ export async function createScratchDocument(
 }
 
 export async function getDocument(
-  documentId: number,
+  documentSessionId: number,
 ): Promise<DocumentSnapshotDto> {
   return invokeCommand<DocumentSnapshotDto>("get_document", {
-    request: { document_id: documentId },
+    request: { document_session_id: documentSessionId },
   });
 }
 
 export async function editDocument(
-  documentId: number,
+  documentSessionId: number,
   expectedRevision: number | null,
   edit: EditCommandDto,
 ): Promise<EditResultDto> {
   return invokeCommand<EditResultDto>("edit_document", {
     request: {
-      document_id: documentId,
+      document_session_id: documentSessionId,
       expected_revision: expectedRevision,
       edit,
     },
@@ -36,19 +36,25 @@ export async function editDocument(
 }
 
 export async function undoDocument(
-  documentId: number,
+  documentSessionId: number,
   expectedRevision: number | null,
 ): Promise<EditResultDto> {
   return invokeCommand<EditResultDto>("undo_document", {
-    request: { document_id: documentId, expected_revision: expectedRevision },
+    request: {
+      document_session_id: documentSessionId,
+      expected_revision: expectedRevision,
+    },
   });
 }
 
 export async function redoDocument(
-  documentId: number,
+  documentSessionId: number,
   expectedRevision: number | null,
 ): Promise<EditResultDto> {
   return invokeCommand<EditResultDto>("redo_document", {
-    request: { document_id: documentId, expected_revision: expectedRevision },
+    request: {
+      document_session_id: documentSessionId,
+      expected_revision: expectedRevision,
+    },
   });
 }

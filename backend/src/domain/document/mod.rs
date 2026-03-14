@@ -20,7 +20,7 @@ pub use document::Document;
 pub use edit::Edit;
 pub use error::DocumentError;
 pub use history::{EditTransaction, UndoManager};
-pub use ids::{DocumentId, RevisionId};
+pub use ids::{DocumentId, DocumentSessionId, RevisionId, ViewportSessionId};
 pub use line_index::LineIndex;
 pub use newline::{NewlineMode, NewlinePolicy};
 pub use piece_table::PieceTable;

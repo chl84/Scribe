@@ -2,9 +2,12 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, RecvError, Sender};
 use std::thread;
 
-use crate::application::commands::{DocumentSnapshot, EditDocument, EditResult, SaveDocument};
+use crate::application::commands::{
+    CreateViewport, DocumentSnapshot, EditDocument, EditResult, SaveDocument, ScrollViewport,
+    ViewportSnapshot,
+};
 use crate::application::services::{EditorService, EditorServiceError};
-use crate::domain::document::{DocumentId, RevisionId};
+use crate::domain::document::{DocumentSessionId, RevisionId, ViewportSessionId};
 use crate::infrastructure::filesystem::FileSystem;
 
 #[derive(Debug)]
@@ -49,20 +52,32 @@ enum EditorRuntimeRequest {
         response: RuntimeResponse<DocumentSnapshot>,
     },
     GetDocument {
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         response: RuntimeResponse<DocumentSnapshot>,
     },
     EditDocument {
         command: EditDocument,
         response: RuntimeResponse<EditResult>,
     },
+    CreateViewport {
+        command: CreateViewport,
+        response: RuntimeResponse<ViewportSnapshot>,
+    },
+    GetViewport {
+        viewport_session_id: ViewportSessionId,
+        response: RuntimeResponse<ViewportSnapshot>,
+    },
+    ScrollViewport {
+        command: ScrollViewport,
+        response: RuntimeResponse<ViewportSnapshot>,
+    },
     UndoDocument {
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected_revision: Option<RevisionId>,
         response: RuntimeResponse<EditResult>,
     },
     RedoDocument {
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected_revision: Option<RevisionId>,
         response: RuntimeResponse<EditResult>,
     },
@@ -71,7 +86,7 @@ enum EditorRuntimeRequest {
         response: RuntimeResponse<DocumentSnapshot>,
     },
     CloseDocument {
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         response: RuntimeResponse<()>,
     },
 }
@@ -115,9 +130,12 @@ impl<F: FileSystem + Send + 'static> EditorRuntime<F> {
         self.send_request(move |response| EditorRuntimeRequest::OpenDocument { path, response })
     }
 
-    pub fn get_document(&self, document_id: DocumentId) -> RuntimeResult<DocumentSnapshot> {
+    pub fn get_document(
+        &self,
+        document_session_id: DocumentSessionId,
+    ) -> RuntimeResult<DocumentSnapshot> {
         self.send_request(move |response| EditorRuntimeRequest::GetDocument {
-            document_id,
+            document_session_id,
             response,
         })
     }
@@ -126,33 +144,63 @@ impl<F: FileSystem + Send + 'static> EditorRuntime<F> {
         self.send_request(move |response| EditorRuntimeRequest::EditDocument { command, response })
     }
 
-    pub fn undo_document(&self, document_id: DocumentId) -> RuntimeResult<EditResult> {
-        self.undo_document_with_revision(document_id, None)
+    pub fn create_viewport(&self, command: CreateViewport) -> RuntimeResult<ViewportSnapshot> {
+        self.send_request(move |response| EditorRuntimeRequest::CreateViewport {
+            command,
+            response,
+        })
+    }
+
+    pub fn get_viewport(
+        &self,
+        viewport_session_id: ViewportSessionId,
+    ) -> RuntimeResult<ViewportSnapshot> {
+        self.send_request(move |response| EditorRuntimeRequest::GetViewport {
+            viewport_session_id,
+            response,
+        })
+    }
+
+    pub fn scroll_viewport(&self, command: ScrollViewport) -> RuntimeResult<ViewportSnapshot> {
+        self.send_request(move |response| EditorRuntimeRequest::ScrollViewport {
+            command,
+            response,
+        })
+    }
+
+    pub fn undo_document(
+        &self,
+        document_session_id: DocumentSessionId,
+    ) -> RuntimeResult<EditResult> {
+        self.undo_document_with_revision(document_session_id, None)
     }
 
     pub fn undo_document_with_revision(
         &self,
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected_revision: Option<RevisionId>,
     ) -> RuntimeResult<EditResult> {
         self.send_request(move |response| EditorRuntimeRequest::UndoDocument {
-            document_id,
+            document_session_id,
             expected_revision,
             response,
         })
     }
 
-    pub fn redo_document(&self, document_id: DocumentId) -> RuntimeResult<EditResult> {
-        self.redo_document_with_revision(document_id, None)
+    pub fn redo_document(
+        &self,
+        document_session_id: DocumentSessionId,
+    ) -> RuntimeResult<EditResult> {
+        self.redo_document_with_revision(document_session_id, None)
     }
 
     pub fn redo_document_with_revision(
         &self,
-        document_id: DocumentId,
+        document_session_id: DocumentSessionId,
         expected_revision: Option<RevisionId>,
     ) -> RuntimeResult<EditResult> {
         self.send_request(move |response| EditorRuntimeRequest::RedoDocument {
-            document_id,
+            document_session_id,
             expected_revision,
             response,
         })
@@ -162,9 +210,9 @@ impl<F: FileSystem + Send + 'static> EditorRuntime<F> {
         self.send_request(move |response| EditorRuntimeRequest::SaveDocument { command, response })
     }
 
-    pub fn close_document(&self, document_id: DocumentId) -> RuntimeResult<()> {
+    pub fn close_document(&self, document_session_id: DocumentSessionId) -> RuntimeResult<()> {
         self.send_request(move |response| EditorRuntimeRequest::CloseDocument {
-            document_id,
+            document_session_id,
             response,
         })
     }
@@ -196,33 +244,53 @@ fn run_editor_runtime<F: FileSystem + Send + 'static>(
                 let _ = response.send(service.open_document(path).map_err(Into::into));
             }
             EditorRuntimeRequest::GetDocument {
-                document_id,
+                document_session_id,
                 response,
             } => {
-                let _ = response.send(service.get_document(document_id).map_err(Into::into));
+                let _ = response.send(
+                    service
+                        .get_document(document_session_id)
+                        .map_err(Into::into),
+                );
             }
             EditorRuntimeRequest::EditDocument { command, response } => {
                 let _ = response.send(service.edit_document(command).map_err(Into::into));
             }
+            EditorRuntimeRequest::CreateViewport { command, response } => {
+                let _ = response.send(service.create_viewport(command).map_err(Into::into));
+            }
+            EditorRuntimeRequest::GetViewport {
+                viewport_session_id,
+                response,
+            } => {
+                let _ = response.send(
+                    service
+                        .get_viewport(viewport_session_id)
+                        .map_err(Into::into),
+                );
+            }
+            EditorRuntimeRequest::ScrollViewport { command, response } => {
+                let _ = response.send(service.scroll_viewport(command).map_err(Into::into));
+            }
             EditorRuntimeRequest::UndoDocument {
-                document_id,
+                document_session_id,
                 expected_revision,
                 response,
             } => {
                 let _ = response.send(
                     service
-                        .undo_document(document_id, expected_revision)
+                        .undo_document(document_session_id, expected_revision)
                         .map_err(Into::into),
                 );
             }
             EditorRuntimeRequest::RedoDocument {
-                document_id,
+                document_session_id,
                 expected_revision,
                 response,
             } => {
                 let _ = response.send(
                     service
-                        .redo_document(document_id, expected_revision)
+                        .redo_document(document_session_id, expected_revision)
                         .map_err(Into::into),
                 );
             }
@@ -230,10 +298,14 @@ fn run_editor_runtime<F: FileSystem + Send + 'static>(
                 let _ = response.send(service.save_document(command).map_err(Into::into));
             }
             EditorRuntimeRequest::CloseDocument {
-                document_id,
+                document_session_id,
                 response,
             } => {
-                let _ = response.send(service.close_document(document_id).map_err(Into::into));
+                let _ = response.send(
+                    service
+                        .close_document(document_session_id)
+                        .map_err(Into::into),
+                );
             }
         }
     }

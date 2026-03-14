@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::application::commands::{EditDocument, SaveDocument};
 use crate::application::services::{EditorService, EditorServiceError};
-use crate::domain::document::{DocumentId, Edit, TextOffset};
+use crate::domain::document::{DocumentSessionId, Edit, TextOffset};
 
 use super::support::{FailingWriteFileSystem, MemoryFileSystem};
 
@@ -24,7 +24,7 @@ fn save_document_without_known_path_is_rejected() {
 
     let error = service
         .save_document(SaveDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             path: None,
         })
@@ -32,7 +32,10 @@ fn save_document_without_known_path_is_rejected() {
 
     assert_eq!(
         error.to_string(),
-        format!("document {} has no file path", snapshot.document_id.value())
+        format!(
+            "document session {} has no file path",
+            snapshot.document_session_id.value()
+        )
     );
 }
 
@@ -44,7 +47,7 @@ fn save_document_surfaces_filesystem_failure_without_dropping_document_state() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -55,7 +58,7 @@ fn save_document_surfaces_filesystem_failure_without_dropping_document_state() {
 
     let error = service
         .save_document(SaveDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             path: None,
         })
@@ -63,21 +66,24 @@ fn save_document_surfaces_filesystem_failure_without_dropping_document_state() {
 
     assert!(matches!(error, EditorServiceError::FileSystem(_)));
     assert_eq!(
-        service.get_document(snapshot.document_id).unwrap().text,
+        service
+            .get_document(snapshot.document_session_id)
+            .unwrap()
+            .text,
         "hello world"
     );
 }
 
 #[test]
-fn unknown_document_operations_return_document_not_found() {
-    let missing_id = DocumentId::new(42);
+fn unknown_document_operations_return_document_session_not_found() {
+    let missing_id = DocumentSessionId::new(42);
     let mut service = EditorService::new(MemoryFileSystem::default());
 
     let get_error = service.get_document(missing_id).unwrap_err();
     let close_error = service.close_document(missing_id).unwrap_err();
     let edit_error = service
         .edit_document(EditDocument {
-            document_id: missing_id,
+            document_session_id: missing_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(0),
@@ -88,15 +94,18 @@ fn unknown_document_operations_return_document_not_found() {
 
     assert!(matches!(
         get_error,
-        EditorServiceError::DocumentNotFound(document_id) if document_id == missing_id
+        EditorServiceError::DocumentSessionNotFound(document_session_id)
+            if document_session_id == missing_id
     ));
     assert!(matches!(
         close_error,
-        EditorServiceError::DocumentNotFound(document_id) if document_id == missing_id
+        EditorServiceError::DocumentSessionNotFound(document_session_id)
+            if document_session_id == missing_id
     ));
     assert!(matches!(
         edit_error,
-        EditorServiceError::DocumentNotFound(document_id) if document_id == missing_id
+        EditorServiceError::DocumentSessionNotFound(document_session_id)
+            if document_session_id == missing_id
     ));
 }
 
@@ -107,7 +116,7 @@ fn edit_document_rejects_stale_expected_revision() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: Some(snapshot.revision),
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -118,7 +127,7 @@ fn edit_document_rejects_stale_expected_revision() {
 
     let error = service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: Some(snapshot.revision),
             edit: Edit::Insert {
                 offset: TextOffset::new(6),
@@ -130,10 +139,10 @@ fn edit_document_rejects_stale_expected_revision() {
     assert!(matches!(
         error,
         EditorServiceError::StaleRevision {
-            document_id,
+            document_session_id,
             expected,
             actual,
-        } if document_id == snapshot.document_id
+        } if document_session_id == snapshot.document_session_id
             && expected == snapshot.revision
             && actual == snapshot.revision.next()
     ));
@@ -146,7 +155,7 @@ fn undo_document_rejects_stale_expected_revision() {
 
     service
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: Some(snapshot.revision),
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -156,16 +165,16 @@ fn undo_document_rejects_stale_expected_revision() {
         .unwrap();
 
     let error = service
-        .undo_document(snapshot.document_id, Some(snapshot.revision))
+        .undo_document(snapshot.document_session_id, Some(snapshot.revision))
         .unwrap_err();
 
     assert!(matches!(
         error,
         EditorServiceError::StaleRevision {
-            document_id,
+            document_session_id,
             expected,
             actual,
-        } if document_id == snapshot.document_id
+        } if document_session_id == snapshot.document_session_id
             && expected == snapshot.revision
             && actual == snapshot.revision.next()
     ));

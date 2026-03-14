@@ -52,12 +52,12 @@ function createEditorStore() {
   }
 
   async function refresh(
-    documentId: number,
+    documentSessionId: number,
     options: {
       preserveDraft?: boolean;
     } = {},
   ): Promise<{ snapshot: DocumentSnapshotDto; finishedAt: number }> {
-    const snapshot = await getDocument(documentId);
+    const snapshot = await getDocument(documentSessionId);
     const draftText = options.preserveDraft ? get(store).draftText : snapshot.text;
     setSnapshot(snapshot, draftText);
     return { snapshot, finishedAt: now() };
@@ -95,15 +95,18 @@ function createEditorStore() {
       try {
         const inputReceivedAt = lastInputReceivedAt ?? now();
         const editResult = await editDocument(
-          state.snapshot.document_id,
+          state.snapshot.document_session_id,
           state.snapshot.revision,
           edit,
         );
         const editResponseAt = now();
         const refreshStartedAt = now();
-        const { snapshot, finishedAt } = await refresh(state.snapshot.document_id, {
-          preserveDraft: true,
-        });
+        const { snapshot, finishedAt } = await refresh(
+          state.snapshot.document_session_id,
+          {
+            preserveDraft: true,
+          },
+        );
         const framePaintedAt = await waitForNextPaint();
         const telemetry = telemetryToMs(editResult.telemetry);
         const snapshotTelemetry = telemetryToMs(snapshot.telemetry);
@@ -199,11 +202,13 @@ function createEditorStore() {
       try {
         const operationStartedAt = now();
         const result = await undoDocument(
-          state.snapshot.document_id,
+          state.snapshot.document_session_id,
           state.snapshot.revision,
         );
         const refreshStartedAt = now();
-        const { snapshot, finishedAt } = await refresh(state.snapshot.document_id);
+        const { snapshot, finishedAt } = await refresh(
+          state.snapshot.document_session_id,
+        );
         const framePaintedAt = await waitForNextPaint();
         const telemetry = telemetryToMs(result.telemetry);
         const snapshotTelemetry = telemetryToMs(snapshot.telemetry);
@@ -243,11 +248,13 @@ function createEditorStore() {
       try {
         const operationStartedAt = now();
         const result = await redoDocument(
-          state.snapshot.document_id,
+          state.snapshot.document_session_id,
           state.snapshot.revision,
         );
         const refreshStartedAt = now();
-        const { snapshot, finishedAt } = await refresh(state.snapshot.document_id);
+        const { snapshot, finishedAt } = await refresh(
+          state.snapshot.document_session_id,
+        );
         const framePaintedAt = await waitForNextPaint();
         const telemetry = telemetryToMs(result.telemetry);
         const snapshotTelemetry = telemetryToMs(snapshot.telemetry);

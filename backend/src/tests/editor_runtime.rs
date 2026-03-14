@@ -13,7 +13,7 @@ fn editor_runtime_executes_document_lifecycle_on_dedicated_thread() {
     let snapshot = runtime.create_document("hello").unwrap();
     let edited = runtime
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: None,
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -21,7 +21,7 @@ fn editor_runtime_executes_document_lifecycle_on_dedicated_thread() {
             },
         })
         .unwrap();
-    let current = runtime.get_document(snapshot.document_id).unwrap();
+    let current = runtime.get_document(snapshot.document_session_id).unwrap();
 
     assert_eq!(edited.changes.len(), 1);
     assert_eq!(current.text, "hello world");
@@ -36,13 +36,13 @@ fn editor_runtime_serializes_commands_from_multiple_callers() {
 
     for text in ["a", "b", "c", "d"] {
         let runtime = runtime.clone();
-        let document_id = snapshot.document_id;
+        let document_session_id = snapshot.document_session_id;
         let text = text.to_string();
 
         handles.push(thread::spawn(move || {
             runtime
                 .edit_document(EditDocument {
-                    document_id,
+                    document_session_id,
                     expected_revision: None,
                     edit: Edit::Insert {
                         offset: TextOffset::new(0),
@@ -57,7 +57,7 @@ fn editor_runtime_serializes_commands_from_multiple_callers() {
         handle.join().unwrap();
     }
 
-    let current = runtime.get_document(snapshot.document_id).unwrap();
+    let current = runtime.get_document(snapshot.document_session_id).unwrap();
 
     assert_eq!(current.text.len(), 4);
     for expected in ["a", "b", "c", "d"] {
@@ -70,8 +70,8 @@ fn editor_runtime_reuses_cached_snapshot_on_repeated_reads() {
     let runtime = EditorRuntime::new(MemoryFileSystem::default());
     let snapshot = runtime.create_document("hello").unwrap();
 
-    let first = runtime.get_document(snapshot.document_id).unwrap();
-    let second = runtime.get_document(snapshot.document_id).unwrap();
+    let first = runtime.get_document(snapshot.document_session_id).unwrap();
+    let second = runtime.get_document(snapshot.document_session_id).unwrap();
 
     assert_eq!(first.text, "hello");
     assert_eq!(second.text, "hello");
@@ -91,7 +91,7 @@ fn editor_runtime_surfaces_stale_revision_errors() {
 
     runtime
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: Some(snapshot.revision),
             edit: Edit::Insert {
                 offset: TextOffset::new(5),
@@ -102,7 +102,7 @@ fn editor_runtime_surfaces_stale_revision_errors() {
 
     let error = runtime
         .edit_document(EditDocument {
-            document_id: snapshot.document_id,
+            document_session_id: snapshot.document_session_id,
             expected_revision: Some(snapshot.revision),
             edit: Edit::Insert {
                 offset: TextOffset::new(6),
@@ -114,10 +114,10 @@ fn editor_runtime_surfaces_stale_revision_errors() {
     assert!(matches!(
         error,
         EditorRuntimeError::Service(crate::application::services::EditorServiceError::StaleRevision {
-            document_id,
+            document_session_id,
             expected,
             actual,
-        }) if document_id == snapshot.document_id
+        }) if document_session_id == snapshot.document_session_id
             && expected == snapshot.revision
             && actual == snapshot.revision.next()
     ));

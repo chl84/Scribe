@@ -20,6 +20,7 @@ export interface PerformanceTelemetryDto {
 }
 
 export interface DocumentSnapshotDto {
+  document_session_id: number;
   document_id: number;
   revision: number;
   text: string;
@@ -30,6 +31,7 @@ export interface DocumentSnapshotDto {
 }
 
 export interface EditResultDto {
+  document_session_id: number;
   document_id: number;
   changes: ChangeSetDto[];
   telemetry: PerformanceTelemetryDto;
