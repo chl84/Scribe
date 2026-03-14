@@ -6,16 +6,16 @@ Expose the text engine through backend application services and stable IPC contr
 
 ## Todo
 
-- [ ] Add application services for document open, close, read, edit, save, undo, and redo.
-- [ ] Define document lifecycle state in `backend/src/application/state/`.
-- [ ] Add DTOs for editor commands and document snapshots.
-- [ ] Add IPC handlers for edit commands.
-- [ ] Return `ChangeSet`-style responses instead of full document payloads where possible.
-- [ ] Define how the frontend requests initial content and incremental updates.
-- [ ] Keep file I/O in `infrastructure/` and out of the domain layer.
-- [ ] Add integration tests for opening a document, editing it, and saving it.
-- [ ] Add integration tests for undo and redo through the application layer.
-- [ ] Document the first stable IPC contract for the editor feature.
+- [x] Add application services for document open, close, read, edit, save, undo, and redo.
+- [x] Define document lifecycle state in `backend/src/application/state/`.
+- [x] Add DTOs for editor commands and document snapshots.
+- [x] Add IPC handlers for edit commands.
+- [x] Return `ChangeSet`-style responses instead of full document payloads where possible.
+- [x] Define how the frontend requests initial content and incremental updates.
+- [x] Keep file I/O in `infrastructure/` and out of the domain layer.
+- [x] Add integration tests for opening a document, editing it, and saving it.
+- [x] Add integration tests for undo and redo through the application layer.
+- [x] Document the first stable IPC contract for the editor feature.
 
 ## Exit Criteria
 

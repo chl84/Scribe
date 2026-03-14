@@ -1,6 +1,6 @@
 use super::{
-    Document, DocumentError, DocumentId, Edit, NewlineMode, Position, RevisionId, TextOffset,
-    TextRange,
+    CursorMove, Document, DocumentError, DocumentId, Edit, NewlineMode, Position, RevisionId,
+    Selection, TextOffset, TextRange,
 };
 
 #[test]
@@ -46,6 +46,27 @@ fn insert_updates_text_revision_and_change_set() {
 }
 
 #[test]
+fn insert_undo_redo_cycle_restores_document() {
+    let mut document = Document::open(DocumentId::new(11), "hello");
+
+    document
+        .apply_edit(Edit::Insert {
+            offset: TextOffset::new(5),
+            text: "!".to_string(),
+        })
+        .unwrap();
+    assert_eq!(document.text(), "hello!");
+
+    let undo_changes = document.undo().unwrap().unwrap();
+    assert_eq!(undo_changes.len(), 1);
+    assert_eq!(document.text(), "hello");
+
+    let redo_changes = document.redo().unwrap().unwrap();
+    assert_eq!(redo_changes.len(), 1);
+    assert_eq!(document.text(), "hello!");
+}
+
+#[test]
 fn delete_returns_removed_text_and_inverse_edit() {
     let mut document = Document::open(DocumentId::new(2), "hello world");
     let range = TextRange::new(TextOffset::new(5), TextOffset::new(11)).unwrap();
@@ -81,6 +102,98 @@ fn replace_updates_text_and_tracks_replaced_range() {
     assert_eq!(
         change_set.range_after(),
         TextRange::new(TextOffset::new(6), TextOffset::new(12)).unwrap()
+    );
+}
+
+#[test]
+fn delete_undo_redo_cycle_restores_document() {
+    let mut document = Document::open(DocumentId::new(12), "hello world");
+    let range = TextRange::new(TextOffset::new(5), TextOffset::new(11)).unwrap();
+
+    document.apply_edit(Edit::Delete { range }).unwrap();
+    assert_eq!(document.text(), "hello");
+
+    document.undo().unwrap();
+    assert_eq!(document.text(), "hello world");
+
+    document.redo().unwrap();
+    assert_eq!(document.text(), "hello");
+}
+
+#[test]
+fn transaction_groups_multiple_edits_into_single_undo_step() {
+    let mut document = Document::open(DocumentId::new(13), "");
+
+    document.begin_transaction();
+    document
+        .apply_edit(Edit::Insert {
+            offset: TextOffset::new(0),
+            text: "hel".to_string(),
+        })
+        .unwrap();
+    document
+        .apply_edit(Edit::Insert {
+            offset: TextOffset::new(3),
+            text: "lo".to_string(),
+        })
+        .unwrap();
+    document.commit_transaction();
+
+    assert_eq!(document.text(), "hello");
+    assert_eq!(document.undo().unwrap().unwrap().len(), 2);
+    assert_eq!(document.text(), "");
+    assert_eq!(document.redo().unwrap().unwrap().len(), 2);
+    assert_eq!(document.text(), "hello");
+}
+
+#[test]
+fn selection_supports_caret_and_non_empty_range() {
+    let caret = Selection::caret(TextOffset::new(3));
+    let range = Selection::new(TextOffset::new(7), TextOffset::new(3));
+
+    assert!(caret.is_caret());
+    assert_eq!(caret.range().unwrap(), TextRange::empty_at(TextOffset::new(3)));
+    assert_eq!(
+        range.range().unwrap(),
+        TextRange::new(TextOffset::new(3), TextOffset::new(7)).unwrap()
+    );
+}
+
+#[test]
+fn cursor_movement_rules_are_separate_from_storage_logic() {
+    let document = Document::open(DocumentId::new(14), "a🙂\nxyz");
+    let selection = Selection::caret(TextOffset::new(5));
+
+    assert_eq!(
+        document
+            .move_selection(selection, CursorMove::Left)
+            .unwrap(),
+        Selection::caret(TextOffset::new(1))
+    );
+    assert_eq!(
+        document
+            .move_selection(Selection::caret(TextOffset::new(1)), CursorMove::Down)
+            .unwrap(),
+        Selection::caret(TextOffset::new(7))
+    );
+}
+
+#[test]
+fn moving_with_a_non_empty_selection_collapses_before_advancing() {
+    let document = Document::open(DocumentId::new(15), "abcdef");
+    let selection = Selection::new(TextOffset::new(5), TextOffset::new(2));
+
+    assert_eq!(
+        document
+            .move_selection(selection, CursorMove::Right)
+            .unwrap(),
+        Selection::caret(TextOffset::new(5))
+    );
+    assert_eq!(
+        document
+            .move_selection(selection, CursorMove::Left)
+            .unwrap(),
+        Selection::caret(TextOffset::new(2))
     );
 }
 
@@ -149,6 +262,78 @@ fn position_lookup_rejects_columns_past_line_end() {
     assert_eq!(
         error,
         DocumentError::PositionOutOfBounds { line: 1, column: 1 }
+    );
+}
+
+#[test]
+fn property_style_edit_sequence_matches_string_model() {
+    let mut document = Document::open(DocumentId::new(16), "alpha");
+    let mut expected = String::from("alpha");
+
+    let edits = vec![
+        Edit::Insert {
+            offset: TextOffset::new(5),
+            text: "\nbeta".to_string(),
+        },
+        Edit::Replace {
+            range: TextRange::new(TextOffset::new(0), TextOffset::new(5)).unwrap(),
+            text: "ALPHA".to_string(),
+        },
+        Edit::Delete {
+            range: TextRange::new(TextOffset::new(5), TextOffset::new(6)).unwrap(),
+        },
+        Edit::Insert {
+            offset: TextOffset::new(5),
+            text: " ".to_string(),
+        },
+    ];
+
+    for edit in edits {
+        match &edit {
+            Edit::Insert { offset, text } => expected.insert_str(offset.value(), text),
+            Edit::Delete { range } => {
+                expected.replace_range(range.start().value()..range.end().value(), "")
+            }
+            Edit::Replace { range, text } => {
+                expected.replace_range(range.start().value()..range.end().value(), text)
+            }
+        }
+
+        document.apply_edit(edit).unwrap();
+        assert_eq!(document.text(), expected);
+    }
+}
+
+#[test]
+fn newline_regression_preserves_detected_crlf_mode() {
+    let mut document = Document::open(DocumentId::new(17), "one\r\ntwo\r\n");
+
+    document
+        .apply_edit(Edit::Insert {
+            offset: TextOffset::new(8),
+            text: "three\r\n".to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(document.newline_policy().preferred_mode(), NewlineMode::Crlf);
+    assert_eq!(document.line_count(), 4);
+}
+
+#[test]
+fn utf8_regression_handles_non_ascii_replace_and_navigation() {
+    let mut document = Document::open(DocumentId::new(18), "blåbær");
+
+    document
+        .apply_edit(Edit::Replace {
+            range: TextRange::new(TextOffset::new(0), TextOffset::new(8)).unwrap(),
+            text: "東京🙂".to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(document.text(), "東京🙂");
+    assert_eq!(
+        document.offset_to_position(TextOffset::new(6)).unwrap(),
+        Position::new(0, 2)
     );
 }
 

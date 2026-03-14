@@ -11,4 +11,6 @@ path = "src/lib.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }

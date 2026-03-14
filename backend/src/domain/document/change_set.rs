@@ -59,4 +59,24 @@ impl ChangeSet {
     pub const fn inverse_edit(&self) -> &Edit {
         &self.inverse_edit
     }
+
+    pub fn forward_edit(&self) -> Edit {
+        if self.removed_text.is_empty() {
+            return Edit::Insert {
+                offset: self.range_before.start(),
+                text: self.inserted_text.clone(),
+            };
+        }
+
+        if self.inserted_text.is_empty() {
+            return Edit::Delete {
+                range: self.range_before,
+            };
+        }
+
+        Edit::Replace {
+            range: self.range_before,
+            text: self.inserted_text.clone(),
+        }
+    }
 }

@@ -1,6 +1,7 @@
 use super::{
-    ChangeSet, DocumentError, DocumentId, Edit, LineIndex, NewlinePolicy, PieceTable, Position,
-    RevisionId, TextBuffer, TextOffset, TextRange,
+    ChangeSet, CursorMove, CursorMoveRules, DocumentError, DocumentId, Edit, LineIndex,
+    NewlinePolicy, PieceTable, Position, RevisionId, Selection, TextBuffer, TextOffset, TextRange,
+    TextSnapshot, UndoManager,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -9,6 +10,7 @@ pub struct Document {
     revision: RevisionId,
     buffer: PieceTable,
     line_index: LineIndex,
+    history: UndoManager,
     newline_policy: NewlinePolicy,
 }
 
@@ -24,6 +26,7 @@ impl Document {
             revision: RevisionId::initial(),
             buffer,
             line_index,
+            history: UndoManager::default(),
             newline_policy,
         }
     }
@@ -38,6 +41,10 @@ impl Document {
 
     pub fn text(&self) -> String {
         self.buffer.snapshot().as_str().to_string()
+    }
+
+    pub fn snapshot(&self) -> TextSnapshot {
+        self.buffer.snapshot()
     }
 
     pub const fn newline_policy(&self) -> NewlinePolicy {
@@ -66,11 +73,89 @@ impl Document {
         self.line_index.position_to_offset(&snapshot, position)
     }
 
+    pub fn line_start_offset(&self, line: usize) -> Result<TextOffset, DocumentError> {
+        self.line_index
+            .line_start(line)
+            .ok_or(DocumentError::PositionOutOfBounds { line, column: 0 })
+    }
+
+    pub fn line_end_offset(&self, line: usize) -> Result<TextOffset, DocumentError> {
+        let start = self.line_start_offset(line)?;
+        let next_start = self
+            .line_index
+            .line_start(line + 1)
+            .unwrap_or_else(|| TextOffset::new(self.len_bytes()));
+        let snapshot = self.buffer.snapshot();
+        let line_text = snapshot.slice(TextRange::new(start, next_start)?)?;
+        let line_end = line_text
+            .strip_suffix('\n')
+            .map(|trimmed| trimmed.len())
+            .unwrap_or_else(|| line_text.len());
+
+        Ok(TextOffset::new(start.value() + line_end))
+    }
+
+    pub fn begin_transaction(&mut self) {
+        self.history.begin_transaction();
+    }
+
+    pub fn commit_transaction(&mut self) {
+        self.history.commit_transaction();
+    }
+
+    pub fn move_selection(
+        &self,
+        selection: Selection,
+        movement: CursorMove,
+    ) -> Result<Selection, DocumentError> {
+        CursorMoveRules::move_selection(self, selection, movement)
+    }
+
     pub fn apply_edit(&mut self, edit: Edit) -> Result<ChangeSet, DocumentError> {
+        self.apply_edit_internal(edit, true)
+    }
+
+    pub fn undo(&mut self) -> Result<Option<Vec<ChangeSet>>, DocumentError> {
+        let Some(transaction) = self.history.pop_undo() else {
+            return Ok(None);
+        };
+
+        let mut applied = Vec::with_capacity(transaction.changes().len());
+
+        for change in transaction.changes().iter().rev() {
+            applied.push(self.apply_edit_internal(change.inverse_edit().clone(), false)?);
+        }
+
+        self.history.push_redo(transaction);
+
+        Ok(Some(applied))
+    }
+
+    pub fn redo(&mut self) -> Result<Option<Vec<ChangeSet>>, DocumentError> {
+        let Some(transaction) = self.history.pop_redo() else {
+            return Ok(None);
+        };
+
+        let mut applied = Vec::with_capacity(transaction.changes().len());
+
+        for change in transaction.changes() {
+            applied.push(self.apply_edit_internal(change.forward_edit(), false)?);
+        }
+
+        self.history.push_undo(transaction);
+
+        Ok(Some(applied))
+    }
+
+    fn apply_edit_internal(
+        &mut self,
+        edit: Edit,
+        record_history: bool,
+    ) -> Result<ChangeSet, DocumentError> {
         match edit {
-            Edit::Insert { offset, text } => self.insert(offset, text),
-            Edit::Delete { range } => self.delete(range),
-            Edit::Replace { range, text } => self.replace(range, text),
+            Edit::Insert { offset, text } => self.insert(offset, text, record_history),
+            Edit::Delete { range } => self.delete(range, record_history),
+            Edit::Replace { range, text } => self.replace(range, text, record_history),
         }
     }
 
@@ -78,6 +163,7 @@ impl Document {
         &mut self,
         offset: TextOffset,
         text: String,
+        record_history: bool,
     ) -> Result<ChangeSet, DocumentError> {
         self.validate_offset(offset)?;
 
@@ -90,7 +176,7 @@ impl Document {
         let range_after = TextRange::new(offset, offset.checked_add(text.len()))?;
         let inverse_edit = Edit::Delete { range: range_after };
 
-        Ok(ChangeSet::new(
+        let change_set = ChangeSet::new(
             revision_before,
             self.revision,
             range_before,
@@ -98,10 +184,16 @@ impl Document {
             text,
             String::new(),
             inverse_edit,
-        ))
+        );
+
+        if record_history {
+            self.history.record(change_set.clone());
+        }
+
+        Ok(change_set)
     }
 
-    fn delete(&mut self, range: TextRange) -> Result<ChangeSet, DocumentError> {
+    fn delete(&mut self, range: TextRange, record_history: bool) -> Result<ChangeSet, DocumentError> {
         self.validate_range(range)?;
 
         let revision_before = self.revision;
@@ -118,7 +210,7 @@ impl Document {
             text: removed_text.clone(),
         };
 
-        Ok(ChangeSet::new(
+        let change_set = ChangeSet::new(
             revision_before,
             self.revision,
             range,
@@ -126,10 +218,21 @@ impl Document {
             String::new(),
             removed_text,
             inverse_edit,
-        ))
+        );
+
+        if record_history {
+            self.history.record(change_set.clone());
+        }
+
+        Ok(change_set)
     }
 
-    fn replace(&mut self, range: TextRange, text: String) -> Result<ChangeSet, DocumentError> {
+    fn replace(
+        &mut self,
+        range: TextRange,
+        text: String,
+        record_history: bool,
+    ) -> Result<ChangeSet, DocumentError> {
         self.validate_range(range)?;
 
         let revision_before = self.revision;
@@ -146,7 +249,7 @@ impl Document {
             text: removed_text.clone(),
         };
 
-        Ok(ChangeSet::new(
+        let change_set = ChangeSet::new(
             revision_before,
             self.revision,
             range,
@@ -154,7 +257,13 @@ impl Document {
             text,
             removed_text,
             inverse_edit,
-        ))
+        );
+
+        if record_history {
+            self.history.record(change_set.clone());
+        }
+
+        Ok(change_set)
     }
 
     fn validate_range(&self, range: TextRange) -> Result<(), DocumentError> {

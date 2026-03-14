@@ -6,16 +6,16 @@ Add undo/redo and a minimal selection model without expanding into advanced edit
 
 ## Todo
 
-- [ ] Define a `Selection` model for a single caret or single range.
-- [ ] Define cursor movement rules separately from storage logic.
-- [ ] Implement transaction boundaries for grouped edits.
-- [ ] Implement an `UndoManager`.
-- [ ] Implement `undo` and `redo` using stored edit transactions.
-- [ ] Ensure each edit produces a stable `ChangeSet`.
-- [ ] Add tests for insert-undo-redo cycles.
-- [ ] Add tests for delete-undo-redo cycles.
-- [ ] Add tests for replace operations and empty selections.
-- [ ] Document deferred features: multi-cursor, grapheme-aware movement, soft wrap, and rectangular selection.
+- [x] Define a `Selection` model for a single caret or single range.
+- [x] Define cursor movement rules separately from storage logic.
+- [x] Implement transaction boundaries for grouped edits.
+- [x] Implement an `UndoManager`.
+- [x] Implement `undo` and `redo` using stored edit transactions.
+- [x] Ensure each edit produces a stable `ChangeSet`.
+- [x] Add tests for insert-undo-redo cycles.
+- [x] Add tests for delete-undo-redo cycles.
+- [x] Add tests for replace operations and empty selections.
+- [x] Document deferred features: multi-cursor, grapheme-aware movement, soft wrap, and rectangular selection.
 
 ## Exit Criteria
 
