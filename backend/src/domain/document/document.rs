@@ -193,15 +193,17 @@ impl Document {
         Ok(change_set)
     }
 
-    fn delete(&mut self, range: TextRange, record_history: bool) -> Result<ChangeSet, DocumentError> {
+    fn delete(
+        &mut self,
+        range: TextRange,
+        record_history: bool,
+    ) -> Result<ChangeSet, DocumentError> {
         self.validate_range(range)?;
 
         let revision_before = self.revision;
-        let snapshot = self.buffer.snapshot();
-        let removed_text = snapshot.slice(range)?.to_string();
+        let removed_text = self.buffer.slice_string(range)?;
         self.buffer.delete(range)?;
-        self.line_index
-            .apply_change(range.start(), range.len(), "");
+        self.line_index.apply_change(range.start(), range.len(), "");
         self.revision = self.revision.next();
 
         let range_after = TextRange::empty_at(range.start());
@@ -236,8 +238,7 @@ impl Document {
         self.validate_range(range)?;
 
         let revision_before = self.revision;
-        let snapshot = self.buffer.snapshot();
-        let removed_text = snapshot.slice(range)?.to_string();
+        let removed_text = self.buffer.slice_string(range)?;
         self.buffer.replace(range, &text)?;
         self.line_index
             .apply_change(range.start(), range.len(), &text);

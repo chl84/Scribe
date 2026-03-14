@@ -2,8 +2,8 @@ use std::env;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
 use scribe_backend::domain::document::{Document, DocumentId, Edit, TextOffset, TextRange};
+use serde::Serialize;
 
 fn main() {
     let measurements = vec![
@@ -138,7 +138,9 @@ fn measure_position_lookup_workload() -> Measurement {
     for (line, column) in positions {
         black_box(
             document
-                .position_to_offset(scribe_backend::domain::document::Position::new(line, column))
+                .position_to_offset(scribe_backend::domain::document::Position::new(
+                    line, column,
+                ))
                 .expect("position lookup should succeed"),
         );
     }

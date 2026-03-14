@@ -187,6 +187,56 @@ impl TextBuffer for PieceTable {
         TextSnapshot::new(text)
     }
 
+    fn slice_string(&self, range: TextRange) -> Result<String, DocumentError> {
+        if range.end().value() > self.len_bytes {
+            return Err(DocumentError::RangeOutOfBounds {
+                len: self.len_bytes,
+                start: range.start(),
+                end: range.end(),
+            });
+        }
+
+        if !self.is_char_boundary(range.start()) {
+            return Err(DocumentError::InvalidUtf8Boundary {
+                offset: range.start(),
+            });
+        }
+
+        if !self.is_char_boundary(range.end()) {
+            return Err(DocumentError::InvalidUtf8Boundary {
+                offset: range.end(),
+            });
+        }
+
+        let remaining_start = range.start().value();
+        let remaining_end = range.end().value();
+        let mut consumed = 0usize;
+        let mut text = String::with_capacity(range.len());
+
+        for piece in &self.pieces {
+            let piece_start = consumed;
+            let piece_end = consumed + piece.len;
+
+            if remaining_end <= piece_start {
+                break;
+            }
+
+            if remaining_start >= piece_end {
+                consumed = piece_end;
+                continue;
+            }
+
+            let take_start = remaining_start.saturating_sub(piece_start);
+            let take_end = (remaining_end.min(piece_end)) - piece_start;
+            let buffer = self.buffer_for(piece.source);
+            text.push_str(&buffer[piece.start + take_start..piece.start + take_end]);
+
+            consumed = piece_end;
+        }
+
+        Ok(text)
+    }
+
     fn is_char_boundary(&self, offset: TextOffset) -> bool {
         if offset.value() > self.len_bytes {
             return false;

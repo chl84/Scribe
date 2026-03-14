@@ -242,6 +242,37 @@ impl PieceTree {
         self.push_snapshot_text(&node.right, target);
     }
 
+    fn push_range_text(
+        &self,
+        node: &Option<Box<Node>>,
+        base_offset: usize,
+        range: TextRange,
+        target: &mut String,
+    ) {
+        let Some(node) = node else {
+            return;
+        };
+
+        let left_bytes = Node::subtree_bytes(&node.left);
+        let piece_offset = base_offset + left_bytes;
+        let piece_end = piece_offset + node.piece.len;
+
+        if range.start().value() < piece_offset {
+            self.push_range_text(&node.left, base_offset, range, target);
+        }
+
+        if range.start().value() < piece_end && range.end().value() > piece_offset {
+            let take_start = range.start().value().saturating_sub(piece_offset);
+            let take_end = (range.end().value().min(piece_end)) - piece_offset;
+            let buffer = self.buffer_for(node.piece.source);
+            target.push_str(&buffer[node.piece.start + take_start..node.piece.start + take_end]);
+        }
+
+        if range.end().value() > piece_end {
+            self.push_range_text(&node.right, piece_offset + node.piece.len, range, target);
+        }
+    }
+
     #[cfg(test)]
     pub fn subtree_newlines(&self) -> usize {
         Node::subtree_newlines(&self.root)
@@ -257,6 +288,32 @@ impl TextBuffer for PieceTree {
         let mut text = String::with_capacity(self.len_bytes());
         self.push_snapshot_text(&self.root, &mut text);
         TextSnapshot::new(text)
+    }
+
+    fn slice_string(&self, range: TextRange) -> Result<String, DocumentError> {
+        if range.end().value() > self.len_bytes() {
+            return Err(DocumentError::RangeOutOfBounds {
+                len: self.len_bytes(),
+                start: range.start(),
+                end: range.end(),
+            });
+        }
+
+        if !self.is_char_boundary(range.start()) {
+            return Err(DocumentError::InvalidUtf8Boundary {
+                offset: range.start(),
+            });
+        }
+
+        if !self.is_char_boundary(range.end()) {
+            return Err(DocumentError::InvalidUtf8Boundary {
+                offset: range.end(),
+            });
+        }
+
+        let mut text = String::with_capacity(range.len());
+        self.push_range_text(&self.root, 0, range, &mut text);
+        Ok(text)
     }
 
     fn is_char_boundary(&self, offset: TextOffset) -> bool {

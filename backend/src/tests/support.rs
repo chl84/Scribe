@@ -10,8 +10,7 @@ pub struct MemoryFileSystem {
     files: HashMap<PathBuf, String>,
 }
 
-impl MemoryFileSystem {
-}
+impl MemoryFileSystem {}
 
 impl FileSystem for MemoryFileSystem {
     fn read_to_string(&self, path: &Path) -> io::Result<String> {

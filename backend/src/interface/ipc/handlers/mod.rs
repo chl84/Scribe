@@ -1,10 +1,9 @@
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use tauri::State;
 
 use crate::application::commands::{EditDocument, SaveDocument};
-use crate::application::services::EditorService;
+use crate::application::runtime::EditorRuntime;
 use crate::domain::document::DocumentId;
 use crate::infrastructure::filesystem::LocalFileSystem;
 use crate::interface::ipc::dto::{
@@ -12,26 +11,25 @@ use crate::interface::ipc::dto::{
     EditResultDto, OpenDocumentRequest, SaveDocumentRequest,
 };
 
-type SharedEditorService = Mutex<EditorService<LocalFileSystem>>;
+type SharedEditorRuntime = EditorRuntime<LocalFileSystem>;
 
 #[tauri::command]
 pub fn create_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: CreateDocumentRequest,
 ) -> Result<DocumentSnapshotDto, String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
-    Ok(service
+    Ok(state
         .create_document(request.text.unwrap_or_default())
+        .map_err(|error| error.to_string())?
         .into())
 }
 
 #[tauri::command]
 pub fn open_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: OpenDocumentRequest,
 ) -> Result<DocumentSnapshotDto, String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
-    service
+    state
         .open_document(request.path)
         .map(Into::into)
         .map_err(|error| error.to_string())
@@ -39,11 +37,10 @@ pub fn open_document(
 
 #[tauri::command]
 pub fn get_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: DocumentReference,
 ) -> Result<DocumentSnapshotDto, String> {
-    let service = state.lock().map_err(|error| error.to_string())?;
-    service
+    state
         .get_document(DocumentId::new(request.document_id))
         .map(Into::into)
         .map_err(|error| error.to_string())
@@ -51,13 +48,12 @@ pub fn get_document(
 
 #[tauri::command]
 pub fn edit_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: EditDocumentRequest,
 ) -> Result<EditResultDto, String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
     let edit = request.edit.try_into()?;
 
-    service
+    state
         .edit_document(EditDocument {
             document_id: DocumentId::new(request.document_id),
             edit,
@@ -68,11 +64,10 @@ pub fn edit_document(
 
 #[tauri::command]
 pub fn undo_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: DocumentReference,
 ) -> Result<EditResultDto, String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
-    service
+    state
         .undo_document(DocumentId::new(request.document_id))
         .map(Into::into)
         .map_err(|error| error.to_string())
@@ -80,11 +75,10 @@ pub fn undo_document(
 
 #[tauri::command]
 pub fn redo_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: DocumentReference,
 ) -> Result<EditResultDto, String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
-    service
+    state
         .redo_document(DocumentId::new(request.document_id))
         .map(Into::into)
         .map_err(|error| error.to_string())
@@ -92,12 +86,10 @@ pub fn redo_document(
 
 #[tauri::command]
 pub fn save_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: SaveDocumentRequest,
 ) -> Result<DocumentSnapshotDto, String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
-
-    service
+    state
         .save_document(SaveDocument {
             document_id: DocumentId::new(request.document_id),
             path: request.path.map(PathBuf::from),
@@ -108,11 +100,10 @@ pub fn save_document(
 
 #[tauri::command]
 pub fn close_document(
-    state: State<'_, SharedEditorService>,
+    state: State<'_, SharedEditorRuntime>,
     request: DocumentReference,
 ) -> Result<(), String> {
-    let mut service = state.lock().map_err(|error| error.to_string())?;
-    service
+    state
         .close_document(DocumentId::new(request.document_id))
         .map_err(|error| error.to_string())
 }

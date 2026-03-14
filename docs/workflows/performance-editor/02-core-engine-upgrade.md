@@ -15,7 +15,7 @@ Replace the current text-buffer hot path with a structure that can scale to very
   - newline boundaries
   - optional lightweight hashes for change detection
 - [x] Preserve the current `Document` abstraction while swapping internal storage.
-- [ ] Remove full-document snapshot materialization from common edit paths where practical.
+- [x] Remove full-document snapshot materialization from common edit paths where practical.
 - [x] Keep undo/redo transaction-based and backend-owned.
 - [x] Add stress tests comparing the new engine to a simple string model.
 - [x] Benchmark insert, delete, replace, navigation, and line mapping after the engine swap.
@@ -31,4 +31,6 @@ Replace the current text-buffer hot path with a structure that can scale to very
 - The current hotspot summary is documented in `docs/domain/current-text-engine-hotspots.md`.
 - The measurement suite now includes snapshot materialization so the current full-text read cost stays visible.
 - The storage direction is recorded in `docs/decisions/0002-adopt-piece-tree-for-performance-core.md`.
-- The active implementation now uses a piece tree, but snapshot materialization and delete performance still need follow-up work.
+- The active implementation now uses a piece tree.
+- Delete and replace now extract removed text directly from the buffer instead of materializing a full document snapshot first.
+- Full snapshot materialization is still intentionally measured because viewport and export work can still regress on it later.

@@ -46,7 +46,11 @@ impl TextSnapshot {
         Ok(&self.text[range.start().value()..range.end().value()])
     }
 
-    pub fn char_column(&self, line_start: TextOffset, offset: TextOffset) -> Result<usize, DocumentError> {
+    pub fn char_column(
+        &self,
+        line_start: TextOffset,
+        offset: TextOffset,
+    ) -> Result<usize, DocumentError> {
         let range = TextRange::new(line_start, offset)?;
         Ok(self.slice(range)?.chars().count())
     }

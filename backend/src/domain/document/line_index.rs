@@ -58,10 +58,12 @@ impl LineIndex {
         snapshot: &TextSnapshot,
         position: Position,
     ) -> Result<TextOffset, DocumentError> {
-        let line_start = self.line_start(position.line()).ok_or(DocumentError::PositionOutOfBounds {
-            line: position.line(),
-            column: position.column(),
-        })?;
+        let line_start =
+            self.line_start(position.line())
+                .ok_or(DocumentError::PositionOutOfBounds {
+                    line: position.line(),
+                    column: position.column(),
+                })?;
         let line_end = self
             .line_start(position.line() + 1)
             .unwrap_or_else(|| TextOffset::new(snapshot.len_bytes()));
@@ -100,20 +102,27 @@ impl LineIndex {
         inserted_text: &str,
     ) {
         let change_end = change_start.checked_add(removed_len);
-        let start_index = self.line_starts.partition_point(|offset| *offset <= change_start);
-        let end_index = self.line_starts.partition_point(|offset| *offset <= change_end);
+        let start_index = self
+            .line_starts
+            .partition_point(|offset| *offset <= change_start);
+        let end_index = self
+            .line_starts
+            .partition_point(|offset| *offset <= change_end);
 
         let delta = inserted_text.len() as isize - removed_len as isize;
         let mut inserted_starts = Vec::new();
 
         for (offset, ch) in inserted_text.char_indices() {
             if ch == '\n' {
-                inserted_starts.push(TextOffset::new(change_start.value() + offset + ch.len_utf8()));
+                inserted_starts.push(TextOffset::new(
+                    change_start.value() + offset + ch.len_utf8(),
+                ));
             }
         }
 
         let inserted_count = inserted_starts.len();
-        self.line_starts.splice(start_index..end_index, inserted_starts);
+        self.line_starts
+            .splice(start_index..end_index, inserted_starts);
 
         for line_start in &mut self.line_starts[start_index + inserted_count..] {
             if line_start.value() > change_end.value() {

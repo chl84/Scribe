@@ -39,8 +39,7 @@ impl CursorMoveRules {
         }
 
         let snapshot = document.snapshot();
-        let previous = snapshot
-            .as_str()[..current.value()]
+        let previous = snapshot.as_str()[..current.value()]
             .char_indices()
             .last()
             .map(|(offset, _)| TextOffset::new(offset))
@@ -104,7 +103,9 @@ impl CursorMoveRules {
         selection: Selection,
     ) -> Result<Selection, DocumentError> {
         let position = document.offset_to_position(selection.active())?;
-        Ok(Selection::caret(document.line_start_offset(position.line())?))
+        Ok(Selection::caret(
+            document.line_start_offset(position.line())?,
+        ))
     }
 
     fn move_to_line_end(

@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use crate::application::commands::DocumentSnapshot;
-use crate::domain::document::{
-    Document, DocumentId, Edit, RevisionId, TextOffset, TextRange,
-};
+use crate::domain::document::{Document, DocumentId, Edit, RevisionId, TextOffset, TextRange};
 use crate::interface::ipc::dto::{ChangeSetDto, DocumentSnapshotDto, EditCommandDto};
 
 #[test]

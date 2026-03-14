@@ -15,6 +15,7 @@ export interface EditorPipelineSample {
 declare global {
   interface Window {
     __SCRIBE_PERF__?: EditorPipelineSample[];
+    __SCRIBE_PERF_DEBUG__?: boolean;
   }
 }
 
@@ -49,7 +50,10 @@ export function recordEditorPipelineSample(sample: EditorPipelineSample): void {
   }
 
   window.__SCRIBE_PERF__ = queue;
-  console.debug("[scribe:perf]", sample);
+
+  if (window.__SCRIBE_PERF_DEBUG__ === true) {
+    console.debug("[scribe:perf]", sample);
+  }
 }
 
 export function telemetryToMs(telemetry: PerformanceTelemetryDto | null | undefined): {

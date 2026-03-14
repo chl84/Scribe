@@ -1,6 +1,6 @@
 use super::{
     CursorMove, Document, DocumentError, DocumentId, Edit, NewlineMode, PieceTree, Position,
-    RevisionId, Selection, TextOffset, TextRange, TextBuffer,
+    RevisionId, Selection, TextBuffer, TextOffset, TextRange,
 };
 
 #[test]
@@ -22,7 +22,10 @@ fn document_starts_with_initial_revision_and_detected_newline_mode() {
 
     assert_eq!(document.id(), DocumentId::new(7));
     assert_eq!(document.revision(), RevisionId::initial());
-    assert_eq!(document.newline_policy().preferred_mode(), NewlineMode::Crlf);
+    assert_eq!(
+        document.newline_policy().preferred_mode(),
+        NewlineMode::Crlf
+    );
     assert!(document.newline_policy().preserve_existing());
 }
 
@@ -152,7 +155,10 @@ fn selection_supports_caret_and_non_empty_range() {
     let range = Selection::new(TextOffset::new(7), TextOffset::new(3));
 
     assert!(caret.is_caret());
-    assert_eq!(caret.range().unwrap(), TextRange::empty_at(TextOffset::new(3)));
+    assert_eq!(
+        caret.range().unwrap(),
+        TextRange::empty_at(TextOffset::new(3))
+    );
     assert_eq!(
         range.range().unwrap(),
         TextRange::new(TextOffset::new(3), TextOffset::new(7)).unwrap()
@@ -289,7 +295,9 @@ fn large_insert_keeps_piece_table_content_consistent() {
 fn position_lookup_rejects_columns_past_line_end() {
     let document = Document::open(DocumentId::new(10), "one\n\nthree");
 
-    let error = document.position_to_offset(Position::new(1, 1)).unwrap_err();
+    let error = document
+        .position_to_offset(Position::new(1, 1))
+        .unwrap_err();
 
     assert_eq!(
         error,
@@ -363,7 +371,8 @@ fn stress_edit_sequence_matches_string_model_over_many_steps() {
                 expected.replace_range(start..end, "");
                 document
                     .apply_edit(Edit::Delete {
-                        range: TextRange::new(TextOffset::new(start), TextOffset::new(end)).unwrap(),
+                        range: TextRange::new(TextOffset::new(start), TextOffset::new(end))
+                            .unwrap(),
                     })
                     .unwrap();
             }
@@ -374,7 +383,8 @@ fn stress_edit_sequence_matches_string_model_over_many_steps() {
                 expected.replace_range(start..end, &text);
                 document
                     .apply_edit(Edit::Replace {
-                        range: TextRange::new(TextOffset::new(start), TextOffset::new(end)).unwrap(),
+                        range: TextRange::new(TextOffset::new(start), TextOffset::new(end))
+                            .unwrap(),
                         text,
                     })
                     .unwrap();
@@ -396,7 +406,10 @@ fn newline_regression_preserves_detected_crlf_mode() {
         })
         .unwrap();
 
-    assert_eq!(document.newline_policy().preferred_mode(), NewlineMode::Crlf);
+    assert_eq!(
+        document.newline_policy().preferred_mode(),
+        NewlineMode::Crlf
+    );
     assert_eq!(document.line_count(), 4);
 }
 

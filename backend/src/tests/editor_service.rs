@@ -107,3 +107,22 @@ fn application_service_can_close_documents() {
 
     assert!(service.get_document(DocumentId::new(1)).is_err());
 }
+
+#[test]
+fn application_service_reuses_cached_snapshot_for_repeated_reads() {
+    let mut service = EditorService::new(MemoryFileSystem::default());
+    let snapshot = service.create_document("hello");
+
+    let first = service.get_document(snapshot.document_id).unwrap();
+    let second = service.get_document(snapshot.document_id).unwrap();
+
+    assert_eq!(first.text, "hello");
+    assert_eq!(second.text, "hello");
+    assert_eq!(
+        second
+            .telemetry
+            .as_ref()
+            .and_then(|telemetry| telemetry.snapshot_build_nanos),
+        Some(0)
+    );
+}

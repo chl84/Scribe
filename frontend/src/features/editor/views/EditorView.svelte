@@ -43,12 +43,12 @@
     class="editor__surface"
     spellcheck="false"
     value={$editor.draftText}
-    on:input={(event) =>
+    oninput={(event) =>
       editor.updateDraft(
         (event.currentTarget as HTMLTextAreaElement).value,
         now(),
       )}
-    on:keydown={handleKeydown}
+    onkeydown={handleKeydown}
     disabled={$editor.status === "booting"}
     placeholder="Start writing."
   ></textarea>

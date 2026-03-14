@@ -33,13 +33,13 @@ The example exercises three slow-path candidates:
 
 ## Current Baseline
 
-Captured on 2026-03-14 on the local development machine.
+Captured on 2026-03-14 on the local development machine after switching to the piece tree and removing full snapshot materialization from common delete and replace paths.
 
-- Insert workload: `125.33ms` total over `1000` operations, `125.33µs` average
-- Delete workload: `6.25s` total over `1000` operations, `6.25ms` average
-- Replace workload: `117.46ms` total over `1000` operations, `117.46µs` average
-- Line lookup workload: `475.52ms` total over `10000` operations, `47.55µs` average
-- Position lookup workload: `453.20ms` total over `10000` operations, `45.32µs` average
-- Snapshot materialization workload: `633.85ms` total over `200` operations, `3.17ms` average
+- Insert workload: `109.39ms` total over `1000` operations, `109.39µs` average
+- Delete workload: `5.75s` total over `1000` operations, `5.75ms` average
+- Replace workload: `97.30ms` total over `1000` operations, `97.30µs` average
+- Line lookup workload: `858.24ms` total over `10000` operations, `85.82µs` average
+- Position lookup workload: `552.32ms` total over `10000` operations, `55.23µs` average
+- Snapshot materialization workload: `563.80ms` total over `200` operations, `2.82ms` average
 
 These values are useful as a first regression baseline, not as acceptance thresholds.

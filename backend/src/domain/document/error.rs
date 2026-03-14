@@ -47,7 +47,11 @@ impl Display for DocumentError {
                 write!(f, "position {}:{} is out of bounds", line, column)
             }
             Self::InvalidUtf8Boundary { offset } => {
-                write!(f, "offset {} is not on a UTF-8 character boundary", offset.value())
+                write!(
+                    f,
+                    "offset {} is not on a UTF-8 character boundary",
+                    offset.value()
+                )
             }
         }
     }

@@ -27,9 +27,19 @@ pub struct DocumentReference {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EditCommandDto {
-    Insert { offset: usize, text: String },
-    Delete { start: usize, end: usize },
-    Replace { start: usize, end: usize, text: String },
+    Insert {
+        offset: usize,
+        text: String,
+    },
+    Delete {
+        start: usize,
+        end: usize,
+    },
+    Replace {
+        start: usize,
+        end: usize,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,13 +1,14 @@
 # Current Text Engine Hotspots
 
-This note records the current measured hotspots in the plain-text engine before the core storage upgrade begins.
+This note records the current measured hotspots in the plain-text engine after the initial piece-tree upgrade.
 
 ## Current Storage Shape
 
 The current implementation uses:
 
-- a piece table with a linear piece list
-- full-string snapshot materialization for some read paths
+- a piece tree with subtree metadata
+- direct range extraction for delete and replace paths
+- full-string snapshot materialization for explicit full-text reads
 - a line index that is updated incrementally
 
 ## Measured Hot Paths
@@ -16,15 +17,17 @@ The current baseline suite measures:
 
 - repeated insert near the middle of the document
 - repeated delete near the middle of the document
+- repeated replace near the middle of the document
 - repeated line lookup
+- repeated reverse position lookup
 - repeated snapshot materialization through `Document::text()`
 
 ## Current Interpretation
 
 - Insert and replace are currently acceptable in the local baseline.
-- Line lookup and reverse position lookup improved significantly with the piece tree.
-- Delete is now the clearest hot path regression and should be treated as the first storage-level optimization target.
+- Delete improved after removing full snapshot materialization from common edit paths, but it is still the clearest storage-level hotspot.
 - Snapshot materialization remains a structural hotspot and is still in the millisecond range per call on the local machine.
+- Line lookup and reverse position lookup remain fast enough to continue with the current tree shape, but they still need to be watched as viewport work begins.
 
 ## Why This Matters
 
@@ -37,4 +40,4 @@ The current model is a reasonable correctness-first foundation, but it is not li
 
 ## Next Step
 
-The next storage work should improve delete performance and reduce the need for full-document materialization during normal editing and rendering.
+The next storage work should focus on delete-path optimization and on keeping viewport work off the full snapshot path.

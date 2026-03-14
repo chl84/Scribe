@@ -8,12 +8,11 @@ mod tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let editor_service = application::services::EditorService::new(
-        infrastructure::filesystem::LocalFileSystem,
-    );
+    let editor_runtime =
+        application::runtime::EditorRuntime::new(infrastructure::filesystem::LocalFileSystem);
 
     tauri::Builder::default()
-        .manage(std::sync::Mutex::new(editor_service))
+        .manage(editor_runtime)
         .invoke_handler(tauri::generate_handler![
             interface::ipc::handlers::create_document,
             interface::ipc::handlers::open_document,
