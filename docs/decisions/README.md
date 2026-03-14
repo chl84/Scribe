@@ -8,3 +8,7 @@ Recommended naming:
 - `0002-short-description.md`
 
 Each ADR should describe the context, decision, alternatives, and consequences.
+
+Current ADRs:
+
+- [0001-adopt-piece-table-text-buffer.md](./0001-adopt-piece-table-text-buffer.md)
