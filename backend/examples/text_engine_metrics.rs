@@ -10,6 +10,7 @@ fn main() {
         measure_insert_workload(),
         measure_delete_workload(),
         measure_line_lookup_workload(),
+        measure_snapshot_materialization_workload(),
     ];
 
     let report = PerformanceReport {
@@ -100,6 +101,18 @@ fn measure_line_lookup_workload() -> Measurement {
     }
 
     Measurement::new("line_lookup", 10_000, start.elapsed())
+}
+
+fn measure_snapshot_materialization_workload() -> Measurement {
+    let document = Document::open(DocumentId::new(4), make_fixture_text(50_000, 48));
+    let iterations = 200usize;
+    let start = Instant::now();
+
+    for _ in 0..iterations {
+        black_box(document.text());
+    }
+
+    Measurement::new("snapshot_materialization", iterations, start.elapsed())
 }
 
 fn build_lookup_offsets(document: &Document, iterations: usize) -> Vec<TextOffset> {

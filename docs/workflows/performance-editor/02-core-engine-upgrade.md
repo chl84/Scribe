@@ -6,8 +6,8 @@ Replace the current text-buffer hot path with a structure that can scale to very
 
 ## Todo
 
-- [ ] Evaluate the current piece-table hot paths with actual measurements.
-- [ ] Design the replacement structure as a balanced piece tree or equivalent editor-oriented tree.
+- [x] Evaluate the current piece-table hot paths with actual measurements.
+- [x] Design the replacement structure as a balanced piece tree or equivalent editor-oriented tree.
 - [ ] Keep byte offsets as the internal source of truth.
 - [ ] Store subtree metadata needed for fast operations:
   - byte length
@@ -25,3 +25,9 @@ Replace the current text-buffer hot path with a structure that can scale to very
 - Core editing operations no longer depend on a linear piece list in hot paths.
 - Line and offset operations scale predictably on large documents.
 - Correctness and undo/redo parity are preserved through the engine change.
+
+## Notes
+
+- The current hotspot summary is documented in `docs/domain/current-text-engine-hotspots.md`.
+- The measurement suite now includes snapshot materialization so the current full-text read cost stays visible.
+- The storage direction is recorded in `docs/decisions/0002-adopt-piece-tree-for-performance-core.md`.

@@ -25,6 +25,7 @@ fn application_service_can_open_edit_and_save_document() {
         })
         .unwrap();
     assert_eq!(result.changes.len(), 1);
+    assert!(result.telemetry.document_operation_nanos.is_some());
 
     let saved = service
         .save_document(SaveDocument {
@@ -82,6 +83,7 @@ fn application_service_supports_undo_and_redo() {
 
     let undone = service.undo_document(snapshot.document_id).unwrap();
     assert_eq!(undone.changes.len(), 1);
+    assert!(undone.telemetry.document_operation_nanos.is_some());
     assert_eq!(
         service.get_document(snapshot.document_id).unwrap().text,
         "hello"
@@ -89,6 +91,7 @@ fn application_service_supports_undo_and_redo() {
 
     let redone = service.redo_document(snapshot.document_id).unwrap();
     assert_eq!(redone.changes.len(), 1);
+    assert!(redone.telemetry.document_operation_nanos.is_some());
     assert_eq!(
         service.get_document(snapshot.document_id).unwrap().text,
         "scribe"

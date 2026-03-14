@@ -17,7 +17,7 @@ Define what "fastest" means for Scribe and make performance measurable before ma
 - [x] Define one reference hardware profile and one minimum hardware profile.
 - [x] Record target budgets for small, medium, large, and huge files.
 - [x] Add machine-readable benchmark output so results can be compared over time.
-- [ ] Add timing instrumentation for:
+- [x] Add timing instrumentation for:
   - input received
   - edit applied
   - viewport built
@@ -37,3 +37,4 @@ Define what "fastest" means for Scribe and make performance measurable before ma
 - The performance contract is documented in `docs/architecture/performance-contract.md`.
 - The first report format is documented in `docs/domain/performance-report-format.md`.
 - The existing text-engine baseline remains the first captured measurement entry point.
+- The current edit pipeline now records timing samples from input to paint; the `viewport built` stage is currently approximated by frontend state refresh for the textarea-based surface and should be replaced once the custom viewport renderer exists.

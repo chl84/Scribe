@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
 
   import { editorStore } from "../state/editor-store";
+  import { now } from "../../../shared/utils/performance";
 
   onMount(() => {
     void editorStore.initialize();
@@ -43,7 +44,10 @@
     spellcheck="false"
     value={$editor.draftText}
     on:input={(event) =>
-      editor.updateDraft((event.currentTarget as HTMLTextAreaElement).value)}
+      editor.updateDraft(
+        (event.currentTarget as HTMLTextAreaElement).value,
+        now(),
+      )}
     on:keydown={handleKeydown}
     disabled={$editor.status === "booting"}
     placeholder="Start writing."

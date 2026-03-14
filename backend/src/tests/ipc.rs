@@ -44,6 +44,7 @@ fn document_snapshot_dto_serializes_editor_state_for_ipc() {
     assert_eq!(dto.line_count, 2);
     assert_eq!(dto.newline_mode, "crlf");
     assert_eq!(dto.path.as_deref(), Some("/tmp/doc.txt"));
+    assert!(dto.telemetry.is_none());
 }
 
 #[test]

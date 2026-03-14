@@ -1,6 +1,9 @@
 use std::path::Path;
+use std::time::Instant;
 
-use crate::application::commands::{DocumentSnapshot, EditDocument, EditResult, SaveDocument};
+use crate::application::commands::{
+    DocumentSnapshot, EditDocument, EditResult, PerformanceTelemetry, SaveDocument,
+};
 use crate::application::state::{DocumentEntry, DocumentStore};
 use crate::domain::document::{Document, DocumentError, DocumentId};
 use crate::infrastructure::filesystem::FileSystem;
@@ -85,8 +88,14 @@ impl<F: FileSystem> EditorService<F> {
             .store
             .get(document_id)
             .ok_or(EditorServiceError::DocumentNotFound(document_id))?;
+        let snapshot_started_at = Instant::now();
 
-        Ok(DocumentSnapshot::from_document(entry.document(), entry.path().cloned()))
+        Ok(DocumentSnapshot::from_document(entry.document(), entry.path().cloned()).with_telemetry(
+            PerformanceTelemetry {
+                document_operation_nanos: None,
+                snapshot_build_nanos: Some(snapshot_started_at.elapsed().as_nanos() as u64),
+            },
+        ))
     }
 
     pub fn edit_document(&mut self, command: EditDocument) -> Result<EditResult, EditorServiceError> {
@@ -95,8 +104,13 @@ impl<F: FileSystem> EditorService<F> {
             .get_mut(command.document_id)
             .ok_or(EditorServiceError::DocumentNotFound(command.document_id))?
             .document_mut();
+        let operation_started_at = Instant::now();
 
         let change = document.apply_edit(command.edit)?;
+        let telemetry = PerformanceTelemetry {
+            document_operation_nanos: Some(operation_started_at.elapsed().as_nanos() as u64),
+            snapshot_build_nanos: None,
+        };
         log::info!(
             "editor.edit document_id={} revision={} changes=1",
             command.document_id.value(),
@@ -106,6 +120,7 @@ impl<F: FileSystem> EditorService<F> {
         Ok(EditResult {
             document_id: command.document_id,
             changes: vec![change],
+            telemetry,
         })
     }
 
@@ -115,7 +130,12 @@ impl<F: FileSystem> EditorService<F> {
             .get_mut(document_id)
             .ok_or(EditorServiceError::DocumentNotFound(document_id))?
             .document_mut();
+        let operation_started_at = Instant::now();
         let changes = document.undo()?.unwrap_or_default();
+        let telemetry = PerformanceTelemetry {
+            document_operation_nanos: Some(operation_started_at.elapsed().as_nanos() as u64),
+            snapshot_build_nanos: None,
+        };
         log::info!(
             "editor.undo document_id={} changes={}",
             document_id.value(),
@@ -125,6 +145,7 @@ impl<F: FileSystem> EditorService<F> {
         Ok(EditResult {
             document_id,
             changes,
+            telemetry,
         })
     }
 
@@ -134,7 +155,12 @@ impl<F: FileSystem> EditorService<F> {
             .get_mut(document_id)
             .ok_or(EditorServiceError::DocumentNotFound(document_id))?
             .document_mut();
+        let operation_started_at = Instant::now();
         let changes = document.redo()?.unwrap_or_default();
+        let telemetry = PerformanceTelemetry {
+            document_operation_nanos: Some(operation_started_at.elapsed().as_nanos() as u64),
+            snapshot_build_nanos: None,
+        };
         log::info!(
             "editor.redo document_id={} changes={}",
             document_id.value(),
@@ -144,6 +170,7 @@ impl<F: FileSystem> EditorService<F> {
         Ok(EditResult {
             document_id,
             changes,
+            telemetry,
         })
     }
 

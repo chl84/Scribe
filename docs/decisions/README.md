@@ -12,3 +12,4 @@ Each ADR should describe the context, decision, alternatives, and consequences.
 Current ADRs:
 
 - [0001-adopt-piece-table-text-buffer.md](./0001-adopt-piece-table-text-buffer.md)
+- [0002-adopt-piece-tree-for-performance-core.md](./0002-adopt-piece-tree-for-performance-core.md)

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::application::commands::{DocumentSnapshot, EditResult};
+use crate::application::commands::{DocumentSnapshot, EditResult, PerformanceTelemetry};
 use crate::domain::document::{ChangeSet, Edit, NewlineMode, TextOffset, TextRange};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +46,7 @@ pub struct DocumentSnapshotDto {
     pub line_count: usize,
     pub newline_mode: &'static str,
     pub path: Option<String>,
+    pub telemetry: Option<PerformanceTelemetryDto>,
 }
 
 impl From<DocumentSnapshot> for DocumentSnapshotDto {
@@ -60,6 +61,7 @@ impl From<DocumentSnapshot> for DocumentSnapshotDto {
                 NewlineMode::Crlf => "crlf",
             },
             path: value.path.map(|path| path.display().to_string()),
+            telemetry: value.telemetry.map(PerformanceTelemetryDto::from),
         }
     }
 }
@@ -91,6 +93,7 @@ impl From<ChangeSet> for ChangeSetDto {
 pub struct EditResultDto {
     pub document_id: u64,
     pub changes: Vec<ChangeSetDto>,
+    pub telemetry: PerformanceTelemetryDto,
 }
 
 impl From<EditResult> for EditResultDto {
@@ -98,6 +101,22 @@ impl From<EditResult> for EditResultDto {
         Self {
             document_id: value.document_id.value(),
             changes: value.changes.into_iter().map(ChangeSetDto::from).collect(),
+            telemetry: PerformanceTelemetryDto::from(value.telemetry),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PerformanceTelemetryDto {
+    pub document_operation_nanos: Option<u64>,
+    pub snapshot_build_nanos: Option<u64>,
+}
+
+impl From<PerformanceTelemetry> for PerformanceTelemetryDto {
+    fn from(value: PerformanceTelemetry) -> Self {
+        Self {
+            document_operation_nanos: value.document_operation_nanos,
+            snapshot_build_nanos: value.snapshot_build_nanos,
         }
     }
 }

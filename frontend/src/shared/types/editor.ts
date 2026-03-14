@@ -14,6 +14,11 @@ export interface ChangeSetDto {
   removed_text: string;
 }
 
+export interface PerformanceTelemetryDto {
+  document_operation_nanos: number | null;
+  snapshot_build_nanos: number | null;
+}
+
 export interface DocumentSnapshotDto {
   document_id: number;
   revision: number;
@@ -21,11 +26,13 @@ export interface DocumentSnapshotDto {
   line_count: number;
   newline_mode: NewlineMode;
   path: string | null;
+  telemetry: PerformanceTelemetryDto | null;
 }
 
 export interface EditResultDto {
   document_id: number;
   changes: ChangeSetDto[];
+  telemetry: PerformanceTelemetryDto;
 }
 
 export type EditCommandDto =

@@ -13,6 +13,12 @@ import {
 } from "../../../shared/ipc/tauri";
 import type { DocumentSnapshotDto } from "../../../shared/types/editor";
 import { deriveEditCommand } from "../commands/text-edit";
+import {
+  now,
+  recordEditorPipelineSample,
+  telemetryToMs,
+  waitForNextPaint,
+} from "../../../shared/utils/performance";
 
 export interface EditorState {
   status: "booting" | "ready" | "syncing" | "error";
@@ -33,6 +39,7 @@ const initialState: EditorState = {
 function createEditorStore() {
   const store = writable<EditorState>(initialState);
   let activeSync: Promise<void> | null = null;
+  let lastInputReceivedAt: number | null = null;
 
   function setSnapshot(snapshot: DocumentSnapshotDto, draftText = snapshot.text): void {
     store.set({
@@ -49,10 +56,11 @@ function createEditorStore() {
     options: {
       preserveDraft?: boolean;
     } = {},
-  ): Promise<void> {
+  ): Promise<{ snapshot: DocumentSnapshotDto; finishedAt: number }> {
     const snapshot = await getDocument(documentId);
     const draftText = options.preserveDraft ? get(store).draftText : snapshot.text;
     setSnapshot(snapshot, draftText);
+    return { snapshot, finishedAt: now() };
   }
 
   async function processSyncLoop(): Promise<void> {
@@ -85,8 +93,32 @@ function createEditorStore() {
       }));
 
       try {
-        await editDocument(state.snapshot.document_id, edit);
-        await refresh(state.snapshot.document_id, { preserveDraft: true });
+        const inputReceivedAt = lastInputReceivedAt ?? now();
+        const editResult = await editDocument(state.snapshot.document_id, edit);
+        const editResponseAt = now();
+        const refreshStartedAt = now();
+        const { snapshot, finishedAt } = await refresh(state.snapshot.document_id, {
+          preserveDraft: true,
+        });
+        const framePaintedAt = await waitForNextPaint();
+        const telemetry = telemetryToMs(editResult.telemetry);
+        const snapshotTelemetry = telemetryToMs(snapshot.telemetry);
+
+        recordEditorPipelineSample({
+          revision: snapshot.revision,
+          reason: "edit",
+          inputToIpcResponseMs: editResponseAt - inputReceivedAt,
+          inputToPaintMs: framePaintedAt - inputReceivedAt,
+          backendDocumentOperationMs: telemetry.documentOperationMs,
+          backendSnapshotBuildMs: snapshotTelemetry.snapshotBuildMs,
+          refreshRoundTripMs: finishedAt - refreshStartedAt,
+          viewportBuildMs: finishedAt - refreshStartedAt,
+          framePaintWaitMs: framePaintedAt - finishedAt,
+        });
+
+        if (get(store).draftText === snapshot.text) {
+          lastInputReceivedAt = null;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -138,7 +170,8 @@ function createEditorStore() {
       }
     },
 
-    updateDraft(text: string): void {
+    updateDraft(text: string, inputReceivedAt = now()): void {
+      lastInputReceivedAt = inputReceivedAt;
       store.update((state) => ({
         ...state,
         draftText: text,
@@ -160,8 +193,25 @@ function createEditorStore() {
       store.update((current) => ({ ...current, status: "syncing", error: null }));
 
       try {
-        await undoDocument(state.snapshot.document_id);
-        await refresh(state.snapshot.document_id);
+        const operationStartedAt = now();
+        const result = await undoDocument(state.snapshot.document_id);
+        const refreshStartedAt = now();
+        const { snapshot, finishedAt } = await refresh(state.snapshot.document_id);
+        const framePaintedAt = await waitForNextPaint();
+        const telemetry = telemetryToMs(result.telemetry);
+        const snapshotTelemetry = telemetryToMs(snapshot.telemetry);
+
+        recordEditorPipelineSample({
+          revision: snapshot.revision,
+          reason: "undo",
+          inputToIpcResponseMs: now() - operationStartedAt,
+          inputToPaintMs: framePaintedAt - operationStartedAt,
+          backendDocumentOperationMs: telemetry.documentOperationMs,
+          backendSnapshotBuildMs: snapshotTelemetry.snapshotBuildMs,
+          refreshRoundTripMs: finishedAt - refreshStartedAt,
+          viewportBuildMs: finishedAt - refreshStartedAt,
+          framePaintWaitMs: framePaintedAt - finishedAt,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -184,8 +234,25 @@ function createEditorStore() {
       store.update((current) => ({ ...current, status: "syncing", error: null }));
 
       try {
-        await redoDocument(state.snapshot.document_id);
-        await refresh(state.snapshot.document_id);
+        const operationStartedAt = now();
+        const result = await redoDocument(state.snapshot.document_id);
+        const refreshStartedAt = now();
+        const { snapshot, finishedAt } = await refresh(state.snapshot.document_id);
+        const framePaintedAt = await waitForNextPaint();
+        const telemetry = telemetryToMs(result.telemetry);
+        const snapshotTelemetry = telemetryToMs(snapshot.telemetry);
+
+        recordEditorPipelineSample({
+          revision: snapshot.revision,
+          reason: "redo",
+          inputToIpcResponseMs: now() - operationStartedAt,
+          inputToPaintMs: framePaintedAt - operationStartedAt,
+          backendDocumentOperationMs: telemetry.documentOperationMs,
+          backendSnapshotBuildMs: snapshotTelemetry.snapshotBuildMs,
+          refreshRoundTripMs: finishedAt - refreshStartedAt,
+          viewportBuildMs: finishedAt - refreshStartedAt,
+          framePaintWaitMs: framePaintedAt - finishedAt,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 

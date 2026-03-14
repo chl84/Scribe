@@ -26,3 +26,9 @@ The current text storage model uses a piece table backed by:
 - Undo transaction integration
 - Richer cursor movement rules
 - Performance profiling under larger edit workloads
+
+## Performance Direction
+
+The current piece table remains the active implementation for the plain-text milestone.
+
+For the performance phase, the planned replacement direction is a balanced piece tree so the editor can keep the same conceptual model while removing linear hot paths from the storage layer.
