@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "Scribe",
-        "width": 1200,
+        "width": 800,
         "height": 800,
-        "minWidth": 960,
-        "minHeight": 640,
+        "minWidth": 300,
+        "minHeight": 300,
         "center": true,
         "resizable": true
       }
