@@ -1,20 +1,42 @@
+use std::env;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
+use serde::Serialize;
 use scribe_backend::domain::document::{Document, DocumentId, Edit, TextOffset, TextRange};
 
 fn main() {
+    let measurements = vec![
+        measure_insert_workload(),
+        measure_delete_workload(),
+        measure_line_lookup_workload(),
+    ];
+
+    let report = PerformanceReport {
+        suite: "text_engine_baseline",
+        hardware_profile: "local-dev-machine",
+        workloads: measurements
+            .iter()
+            .cloned()
+            .map(MeasurementRecord::from)
+            .collect(),
+    };
+
+    if env::args().any(|argument| argument == "--json") {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("report should serialize to JSON")
+        );
+        return;
+    }
+
     println!("Scribe text engine performance baseline");
     println!("These measurements are local, indicative, and non-gating.");
     println!();
 
-    let insert = measure_insert_workload();
-    let delete = measure_delete_workload();
-    let line_lookup = measure_line_lookup_workload();
-
-    print_result("Insert workload", insert);
-    print_result("Delete workload", delete);
-    print_result("Line lookup workload", line_lookup);
+    for measurement in &measurements {
+        print_result(measurement);
+    }
 }
 
 fn measure_insert_workload() -> Measurement {
@@ -77,7 +99,7 @@ fn measure_line_lookup_workload() -> Measurement {
         );
     }
 
-    Measurement::new("line lookup", 10_000, start.elapsed())
+    Measurement::new("line_lookup", 10_000, start.elapsed())
 }
 
 fn build_lookup_offsets(document: &Document, iterations: usize) -> Vec<TextOffset> {
@@ -111,32 +133,59 @@ fn make_fixture_text(line_count: usize, line_len: usize) -> String {
     text
 }
 
-fn print_result(label: &str, measurement: Measurement) {
+fn print_result(measurement: &Measurement) {
     println!(
-        "{label}: total={:.2?}, iterations={}, avg={:.2?}",
+        "{}: total={:.2?}, iterations={}, avg={:.2?}",
+        measurement.name,
         measurement.total,
         measurement.iterations,
         measurement.average()
     );
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Serialize)]
+struct PerformanceReport {
+    suite: &'static str,
+    hardware_profile: &'static str,
+    workloads: Vec<MeasurementRecord>,
+}
+
+#[derive(Debug, Clone)]
 struct Measurement {
-    _name: &'static str,
+    name: &'static str,
     iterations: usize,
     total: Duration,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MeasurementRecord {
+    name: &'static str,
+    iterations: usize,
+    total_nanos: u64,
+    average_nanos: u64,
 }
 
 impl Measurement {
     const fn new(name: &'static str, iterations: usize, total: Duration) -> Self {
         Self {
-            _name: name,
+            name,
             iterations,
             total,
         }
     }
 
-    fn average(self) -> Duration {
+    fn average(&self) -> Duration {
         Duration::from_secs_f64(self.total.as_secs_f64() / self.iterations as f64)
+    }
+}
+
+impl From<Measurement> for MeasurementRecord {
+    fn from(value: Measurement) -> Self {
+        Self {
+            name: value.name,
+            iterations: value.iterations,
+            total_nanos: value.total.as_nanos() as u64,
+            average_nanos: value.average().as_nanos() as u64,
+        }
     }
 }

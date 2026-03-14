@@ -10,6 +10,12 @@ Run the local baseline from the backend directory:
 cargo run --example text_engine_metrics
 ```
 
+Machine-readable output:
+
+```bash
+cargo run --example text_engine_metrics -- --json
+```
+
 The example exercises three slow-path candidates:
 
 - repeated inserts near the middle of a large document
@@ -26,8 +32,8 @@ The example exercises three slow-path candidates:
 
 Captured on 2026-03-14 on the local development machine.
 
-- Insert workload: `121.21ms` total over `1000` operations, `121.21µs` average
-- Delete workload: `251.73ms` total over `1000` operations, `251.73µs` average
-- Line lookup workload: `1.20s` total over `10000` operations, `120.03µs` average
+- Insert workload: `102.90ms` total over `1000` operations, `102.90µs` average
+- Delete workload: `200.66ms` total over `1000` operations, `200.66µs` average
+- Line lookup workload: `3.27s` total over `10000` operations, `326.65µs` average
 
 These values are useful as a first regression baseline, not as acceptance thresholds.
